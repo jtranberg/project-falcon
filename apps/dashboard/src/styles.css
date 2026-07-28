@@ -1,0 +1,281 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #e9f3ff;
+  background: #07111f;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(32, 113, 255, 0.18), transparent 34rem),
+    linear-gradient(180deg, #07111f 0%, #091827 100%);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.shell {
+  width: min(1460px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 40px 0 72px;
+}
+
+.hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 30px;
+  border: 1px solid rgba(130, 185, 255, 0.18);
+  border-radius: 20px;
+  background: rgba(8, 24, 42, 0.78);
+  box-shadow: 0 24px 90px rgba(0, 0, 0, 0.28);
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: #61b7ff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 10px;
+  font-size: clamp(2.2rem, 5vw, 4.8rem);
+  line-height: 0.95;
+  letter-spacing: -0.055em;
+}
+
+.subtitle {
+  max-width: 720px;
+  margin-bottom: 0;
+  color: #a9bfd5;
+  font-size: 1rem;
+}
+
+.connection {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.connection span {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.connection.online {
+  color: #75f5b8;
+  background: rgba(39, 174, 96, 0.12);
+  border: 1px solid rgba(117, 245, 184, 0.3);
+}
+
+.connection.online span {
+  background: #75f5b8;
+  box-shadow: 0 0 14px #75f5b8;
+}
+
+.connection.offline {
+  color: #ff8c9a;
+  background: rgba(255, 65, 90, 0.12);
+  border: 1px solid rgba(255, 140, 154, 0.3);
+}
+
+.connection.offline span {
+  background: #ff8c9a;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin: 20px 0 44px;
+}
+
+.summary-card,
+.drone-card,
+.empty-state {
+  border: 1px solid rgba(130, 185, 255, 0.16);
+  background: rgba(9, 27, 47, 0.82);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
+}
+
+.summary-card {
+  padding: 20px;
+  border-radius: 16px;
+}
+
+.summary-card span,
+.telemetry-grid span,
+.drone-label {
+  display: block;
+  color: #7894ae;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.summary-card strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 1.7rem;
+}
+
+.section-heading h2 {
+  margin-bottom: 18px;
+  font-size: 1.8rem;
+}
+
+.fleet-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.drone-card {
+  padding: 22px;
+  border-radius: 18px;
+}
+
+.drone-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.drone-card h3 {
+  margin: 3px 0 0;
+  font-size: 1.35rem;
+}
+
+.mode {
+  padding: 7px 10px;
+  border-radius: 999px;
+  color: #86d4ff;
+  background: rgba(46, 150, 220, 0.12);
+  border: 1px solid rgba(90, 190, 255, 0.22);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.mode-return_to_home {
+  color: #ffd37a;
+  background: rgba(255, 180, 45, 0.12);
+  border-color: rgba(255, 211, 122, 0.25);
+}
+
+.telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.telemetry-grid div {
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(4, 15, 28, 0.7);
+}
+
+.telemetry-grid strong {
+  display: block;
+  margin-top: 7px;
+  font-size: 1rem;
+}
+
+.coordinates {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  color: #8caac5;
+  background: rgba(4, 15, 28, 0.5);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.82rem;
+}
+
+.alerts {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.nominal,
+.alert {
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 0.82rem;
+}
+
+.nominal {
+  color: #70e8ad;
+  background: rgba(45, 185, 115, 0.1);
+}
+
+.alert-warning {
+  color: #ffd37a;
+  background: rgba(255, 180, 45, 0.12);
+}
+
+.alert-critical {
+  color: #ff8c9a;
+  background: rgba(255, 65, 90, 0.13);
+}
+
+.empty-state {
+  grid-column: 1 / -1;
+  padding: 44px;
+  border-radius: 18px;
+  color: #8caac5;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .summary-grid,
+  .fleet-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .hero {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 620px) {
+  .shell {
+    width: min(100% - 24px, 1460px);
+    padding-top: 20px;
+  }
+
+  .summary-grid,
+  .fleet-grid,
+  .telemetry-grid {
+    grid-template-columns: 1fr;
+  }
+}

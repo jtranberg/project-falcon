@@ -1,0 +1,53 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: falcon-mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./infra/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+
+  alert-service:
+    build:
+      context: .
+      dockerfile: apps/alert-service/Dockerfile
+    environment:
+      GRPC_ALERT_ADDRESS: 0.0.0.0:50051
+    ports:
+      - "50051:50051"
+
+  gateway:
+    build:
+      context: .
+      dockerfile: apps/gateway/Dockerfile
+    depends_on:
+      - mosquitto
+      - alert-service
+    environment:
+      MQTT_URL: mqtt://mosquitto:1883
+      MQTT_TOPIC: falcon/drones/+/telemetry
+      GATEWAY_PORT: 5050
+      GRPC_ALERT_ADDRESS: alert-service:50051
+    ports:
+      - "5050:5050"
+
+  simulator:
+    build:
+      context: .
+      dockerfile: apps/simulator/Dockerfile
+    depends_on:
+      - mosquitto
+    environment:
+      MQTT_URL: mqtt://mosquitto:1883
+      SIMULATOR_DRONES: 4
+      SIMULATOR_INTERVAL_MS: 500
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: apps/dashboard/Dockerfile
+    depends_on:
+      - gateway
+    ports:
+      - "5173:80"

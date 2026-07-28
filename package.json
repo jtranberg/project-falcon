@@ -1,0 +1,21 @@
+{
+  "name": "project-falcon",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "install:all": "npm install",
+    "dev:broker": "docker compose up mosquitto",
+    "dev:simulator": "npm run dev -w @falcon/simulator",
+    "dev:gateway": "npm run dev -w @falcon/gateway",
+    "dev:alerts": "npm run dev -w @falcon/alert-service",
+    "dev:dashboard": "npm run dev -w @falcon/dashboard",
+    "build": "npm run build --workspaces",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

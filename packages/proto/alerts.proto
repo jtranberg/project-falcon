@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package falcon.alerts;
+
+service AlertEvaluator {
+  rpc EvaluateTelemetry (TelemetryRequest) returns (AlertResponse);
+}
+
+message TelemetryRequest {
+  string drone_id = 1;
+  int64 timestamp_ms = 2;
+  double battery_percent = 3;
+  double altitude_m = 4;
+  double speed_mps = 5;
+  double latitude = 6;
+  double longitude = 7;
+  double temperature_c = 8;
+  double signal_dbm = 9;
+  string flight_mode = 10;
+}
+
+message Alert {
+  string code = 1;
+  string severity = 2;
+  string message = 3;
+}
+
+message AlertResponse {
+  repeated Alert alerts = 1;
+}
