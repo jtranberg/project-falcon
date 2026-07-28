@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { randomUUID } from "node:crypto";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -137,7 +138,7 @@ io.on("connection", (socket) => {
 });
 
 const mqttClient = mqtt.connect(mqttUrl, {
-  clientId: `falcon-gateway-${crypto.randomUUID()}`,
+  clientId: `falcon-gateway-${randomUUID()}`,
   reconnectPeriod: 1_000,
   clean: true
 });

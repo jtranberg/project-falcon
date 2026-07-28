@@ -1,96 +1,282 @@
 # Project Falcon
 
-A low-latency IoT drone telemetry lab built to demonstrate:
+<p align="center">
+  <img src="./docs/screenshot.png" alt="Project Falcon Mission Control Dashboard" width="100%" />
+</p>
 
-- MQTT device telemetry
-- gRPC service-to-service communication
-- WebSocket browser updates
-- React operations dashboard
-- Dockerized local architecture
-- A clean migration path to Azure IoT Hub
+> **Mission Control for Connected Devices**
 
-## Architecture
+<p align="center">
+
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript)
+![Node.js](https://img.shields.io/badge/Node.js-20-339933?logo=node.js)
+![MQTT](https://img.shields.io/badge/MQTT-5-660066?logo=eclipsemosquitto)
+![gRPC](https://img.shields.io/badge/gRPC-Microservices-244C5A?logo=grpc)
+![Socket.IO](https://img.shields.io/badge/Socket.IO-Real--Time-010101?logo=socketdotio)
+![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?logo=docker)
+![Leaflet](https://img.shields.io/badge/Leaflet-Live%20Maps-199900?logo=leaflet)
+![Azure](https://img.shields.io/badge/Azure-IoT%20Ready-0078D4?logo=microsoftazure)
+![License](https://img.shields.io/badge/License-MIT-green)
+
+</p>
+
+---
+
+# Overview
+
+Project Falcon is a production-oriented IoT operations platform for monitoring, analyzing, and managing fleets of connected devices in real time.
+
+Built around an event-driven architecture, Falcon combines MQTT messaging, gRPC microservices, WebSocket streaming, and a React Mission Control dashboard to deliver low-latency telemetry visualization and operational awareness.
+
+While the current implementation simulates autonomous drones, the underlying architecture is designed to support virtually any connected device, including robotics, autonomous vehicles, industrial equipment, environmental sensors, and embedded systems.
+
+---
+
+# Key Features
+
+- Real-time IoT telemetry processing
+- MQTT event-driven messaging
+- gRPC microservice architecture
+- Live Mission Control dashboard
+- Interactive fleet map with Leaflet
+- Flight trail visualization
+- WebSocket streaming without polling
+- Dockerized local deployment
+- TypeScript throughout the platform
+- Azure IoT migration roadmap
+
+---
+
+# System Architecture
 
 ```text
-Simulator -> MQTT -> Gateway -> Socket.IO -> React Dashboard
-                         |
-                         +---- gRPC ----> Alert Service
+                 Drone Simulator
+                        │
+                  MQTT Telemetry
+                        │
+                Eclipse Mosquitto
+                        │
+                        ▼
+              Telemetry Gateway
+                        │
+        ┌───────────────┴───────────────┐
+        │                               │
+        ▼                               ▼
+  gRPC Alert Service             Device Registry
+        │
+        ▼
+   WebSocket Gateway
+        │
+        ▼
+ React Mission Control Dashboard
 ```
 
-The current implementation simulates multiple drones, publishes telemetry every 500 ms,
-validates each message, evaluates alerts over gRPC, measures latency, and streams updates to
-the browser without polling.
+---
 
-## Prerequisites
+# Technology Stack
 
-- Node.js 20 or newer
-- npm
-- Docker Desktop
+## Frontend
 
-## Fastest start
+- React 19
+- TypeScript
+- Leaflet
+- Socket.IO Client
 
-```bash
-docker compose up --build
-```
+## Backend
 
-Open:
+- Node.js
+- Express
+- MQTT
+- gRPC
+- Protocol Buffers
+- Socket.IO
 
-```text
-http://localhost:5173
-```
+## Infrastructure
 
-Gateway health:
+- Docker
+- Docker Compose
+- Eclipse Mosquitto
+- npm Workspaces
 
-```text
-http://localhost:5050/api/health
-```
+## Planned Cloud Platform
 
-## Local development
+- Azure IoT Hub
+- Azure Container Apps
+- Azure Monitor
+- Azure Event Hubs
+- Azure Device Twins
 
-Install dependencies:
+---
+
+# Current Capabilities
+
+## Telemetry Processing
+
+Each simulated aircraft continuously publishes:
+
+- GPS Position
+- Heading
+- Speed
+- Altitude
+- Battery
+- Voltage
+- Signal Strength
+- Temperature
+- Flight Mode
+
+---
+
+## Mission Control Dashboard
+
+The operations dashboard provides:
+
+- Live fleet map
+- Aircraft selection
+- Flight trail history
+- Fleet health
+- Active alerts
+- Gateway latency
+- Connection status
+
+---
+
+## Alert Processing
+
+A dedicated gRPC microservice independently evaluates incoming telemetry and generates operational alerts.
+
+Current alert conditions include:
+
+- Low Battery
+- Critical Battery
+- Weak Signal
+- Critical Signal
+- Elevated Temperature
+- Critical Temperature
+
+---
+
+# Local Development
+
+Install dependencies
 
 ```bash
 npm install
 ```
 
-Start Mosquitto:
+Start the platform
 
 ```bash
-docker compose up mosquitto
+docker compose up --build
 ```
 
-Use four terminals:
-
-```bash
-npm run dev:alerts
-npm run dev:gateway
-npm run dev:simulator
-npm run dev:dashboard
-```
-
-## MQTT topics
+Mission Control Dashboard
 
 ```text
-falcon/drones/{droneId}/telemetry
+http://localhost:5173
 ```
 
-The gateway subscribes with:
+Gateway Health Endpoint
 
 ```text
-falcon/drones/+/telemetry
+http://localhost:5050/api/health
 ```
 
-## First engineering exercises
+---
 
-1. Change `SIMULATOR_INTERVAL_MS` from 500 to 100 and compare latency.
-2. Change MQTT QoS from 0 to 1 and discuss the delivery/overhead tradeoff.
-3. Trigger low-battery alerts by reducing initial battery values.
-4. Stop the simulator and add stale-device detection in the gateway.
-5. Persist telemetry to MongoDB.
-6. Replace Mosquitto with Azure IoT Hub.
-7. Add a UDP position-ingest adapter and benchmark it against MQTT.
+# Project Roadmap
 
-## Security note
+## Phase 1 ✅ Core Platform
 
-The local Mosquitto broker allows anonymous access for development only. Production must use
-TLS, authenticated device identities, authorization, secret management, and network controls.
+- MQTT Messaging
+- Docker Infrastructure
+- gRPC Services
+- WebSocket Streaming
+- React Dashboard
+- Drone Simulator
+
+## Phase 2 ✅ Mission Control
+
+- Interactive Fleet Map
+- Flight Trail Visualization
+- Aircraft Selection
+- Fleet Telemetry
+- Operational Dashboard
+
+## Phase 3 🚧 Device Management
+
+- Device Registry
+- Fleet Management
+- Aircraft Profiles
+- Firmware Tracking
+- Online / Offline Detection
+
+## Phase 4
+
+- Historical Telemetry
+- Mission Replay
+- Incident Timeline
+- MongoDB Persistence
+- Fleet Analytics
+
+## Phase 5
+
+- Azure IoT Hub
+- Azure Container Apps
+- Azure Monitor
+- Event Hubs
+- Production Deployment
+
+## Phase 6
+
+- AI Mission Summaries
+- Predictive Maintenance
+- Battery Forecasting
+- Fleet Intelligence
+- Digital Twin Integration
+
+---
+
+# Engineering Principles
+
+Project Falcon is being developed using modern enterprise engineering practices, including:
+
+- Event-driven architecture
+- Low-latency telemetry
+- Microservice design
+- Containerized deployment
+- Real-time visualization
+- Cloud-native architecture
+- Operational observability
+- Scalable system design
+
+---
+
+# Repository Structure
+
+```text
+project-falcon/
+│
+├── apps/
+│   ├── dashboard/
+│   ├── gateway/
+│   ├── simulator/
+│   └── alert-service/
+│
+├── packages/
+│
+├── docs/
+│   ├── screenshot.png
+│   ├── architecture.png
+│   └── roadmap.md
+│
+├── docker-compose.yml
+├── package.json
+└── README.md
+```
+
+---
+
+# License
+
+MIT
