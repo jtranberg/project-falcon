@@ -1,14 +1,19 @@
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
 #include <csignal>
 #include <cstdlib>
+#include <ctime>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
 #include <random>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <thread>
+#include <utility>
 
 #include <mqtt/async_client.h>
 #include <nlohmann/json.hpp>
@@ -19,6 +24,9 @@ namespace {
 
 constexpr int QOS = 1;
 constexpr int TELEMETRY_INTERVAL_MS = 500;
+
+constexpr double HOME_LATITUDE = 48.4284;
+constexpr double HOME_LONGITUDE = -123.3656;
 
 std::atomic<bool> running{true};
 
@@ -37,6 +45,7 @@ std::string getEnvironmentValue(
 
 std::string createIsoTimestamp() {
     const auto now = std::chrono::system_clock::now();
+
     const auto milliseconds =
         std::chrono::duration_cast<std::chrono::milliseconds>(
             now.time_since_epoch()
@@ -76,10 +85,63 @@ double clampValue(
     const double minimum,
     const double maximum
 ) {
-    return std::max(minimum, std::min(value, maximum));
+    return std::max(
+        minimum,
+        std::min(value, maximum)
+    );
 }
 
-class FalconDrone {
+double moveToward(
+    const double current,
+    const double target,
+    const double maximumStep
+) {
+    const double difference = target - current;
+
+    if (std::abs(difference) <= maximumStep) {
+        return target;
+    }
+
+    return current +
+        std::copysign(maximumStep, difference);
+}
+
+enum class FlightState {
+    Mission,
+    Hover,
+    Paused,
+    ReturnToHome,
+    Landing,
+    Landed
+};
+
+std::string flightStateToString(
+    const FlightState state
+) {
+    switch (state) {
+        case FlightState::Mission:
+            return "MISSION";
+
+        case FlightState::Hover:
+            return "HOVER";
+
+        case FlightState::Paused:
+            return "PAUSED";
+
+        case FlightState::ReturnToHome:
+            return "RETURN_TO_HOME";
+
+        case FlightState::Landing:
+            return "LANDING";
+
+        case FlightState::Landed:
+            return "LANDED";
+    }
+
+    return "UNKNOWN";
+}
+
+class FalconDrone final : public virtual mqtt::callback {
 public:
     FalconDrone(
         std::string brokerUrl,
@@ -88,21 +150,43 @@ public:
         : brokerUrl_(std::move(brokerUrl)),
           droneId_(std::move(droneId)),
           clientId_("falcon-native-" + droneId_),
-          telemetryTopic_("falcon/drones/" + droneId_ + "/telemetry"),
-          statusTopic_("falcon/drones/" + droneId_ + "/status"),
+          telemetryTopic_(
+              "falcon/drones/" +
+              droneId_ +
+              "/telemetry"
+          ),
+          statusTopic_(
+              "falcon/drones/" +
+              droneId_ +
+              "/status"
+          ),
+          commandTopic_(
+              "falcon/drones/" +
+              droneId_ +
+              "/commands"
+          ),
+          commandStatusTopic_(
+              "falcon/drones/" +
+              droneId_ +
+              "/command-status"
+          ),
           client_(brokerUrl_, clientId_),
           randomEngine_(std::random_device{}()),
           altitudeNoise_(-0.45, 0.45),
           headingNoise_(-0.8, 0.8),
           speedNoise_(-0.15, 0.15),
           temperatureNoise_(-0.04, 0.06),
-          signalNoise_(-1, 1) {}
+          signalNoise_(-1, 1) {
+        client_.set_callback(*this);
+    }
 
     void connect() {
         mqtt::connect_options options;
 
         options.set_clean_session(true);
-        options.set_automatic_reconnect(true);
+        options.set_automatic_reconnect(false);
+        options.set_keep_alive_interval(20);
+        options.set_connect_timeout(10);
 
         const json offlineStatus = {
             {"schemaVersion", 1},
@@ -127,7 +211,21 @@ public:
 
         client_.connect(options)->wait();
 
-        publishStatus("ONLINE");
+        std::cout
+            << "MQTT connection completed."
+            << '\n';
+
+        subscribeToCommands();
+
+        std::cout
+            << "Command subscription completed."
+            << '\n';
+
+        publishStatusBlocking("ONLINE");
+
+        std::cout
+            << "ONLINE status published."
+            << '\n';
 
         std::cout
             << droneId_
@@ -137,6 +235,16 @@ public:
         std::cout
             << "Publishing telemetry to: "
             << telemetryTopic_
+            << '\n';
+
+        std::cout
+            << "Listening for commands on: "
+            << commandTopic_
+            << '\n';
+
+        std::cout
+            << "Publishing command status to: "
+            << commandStatusTopic_
             << '\n';
     }
 
@@ -158,60 +266,623 @@ public:
             return;
         }
 
-        publishStatus("OFFLINE");
+        try {
+            publishStatusBlocking("OFFLINE");
 
-        client_.disconnect()->wait();
+            client_.disconnect()->wait();
 
-        std::cout
-            << droneId_
-            << " disconnected."
-            << '\n';
+            std::cout
+                << droneId_
+                << " disconnected."
+                << '\n';
+        } catch (const mqtt::exception& error) {
+            std::cerr
+                << "MQTT disconnect error: "
+                << error.what()
+                << '\n';
+        }
+    }
+
+    void connection_lost(
+        const std::string& cause
+    ) override {
+        std::cerr
+            << "MQTT connection lost";
+
+        if (!cause.empty()) {
+            std::cerr
+                << ": "
+                << cause;
+        }
+
+        std::cerr << '\n';
+
+        running = false;
+    }
+
+    void message_arrived(
+        mqtt::const_message_ptr message
+    ) override {
+        if (!message) {
+            return;
+        }
+
+        if (message->get_topic() != commandTopic_) {
+            return;
+        }
+
+        handleCommand(message->to_string());
+    }
+
+    void delivery_complete(
+        mqtt::delivery_token_ptr
+    ) override {
     }
 
 private:
-    void updateAircraftState() {
-        const double altitudeDifference =
-            targetAltitudeM_ - altitudeM_;
+    void subscribeToCommands() {
+        if (!client_.is_connected()) {
+            throw std::runtime_error(
+                "Cannot subscribe because MQTT is not connected."
+            );
+        }
 
-        if (std::abs(altitudeDifference) > 0.5) {
-            const double adjustment =
-                std::copysign(
-                    std::min(
-                        std::abs(altitudeDifference),
-                        1.8
-                    ),
-                    altitudeDifference
+        client_
+            .subscribe(commandTopic_, QOS)
+            ->wait();
+    }
+
+    void handleCommand(
+        const std::string& rawPayload
+    ) {
+        std::string commandId = "unknown";
+        std::string command = "UNKNOWN";
+
+        try {
+            const json payload =
+                json::parse(rawPayload);
+
+            if (!payload.is_object()) {
+                throw std::runtime_error(
+                    "Command payload must be a JSON object."
+                );
+            }
+
+            commandId =
+                payload.value(
+                    "commandId",
+                    "unknown"
                 );
 
-            altitudeM_ += adjustment;
+            command =
+                payload.value(
+                    "command",
+                    ""
+                );
+
+            if (command.empty()) {
+                publishCommandStatusAsync(
+                    commandId,
+                    "UNKNOWN",
+                    "REJECTED",
+                    "Missing command."
+                );
+
+                return;
+            }
+
+            std::string rejectionReason;
+            std::string successDetail = "Command applied.";
+            bool accepted = false;
+
+            {
+                std::lock_guard<std::mutex> lock(
+                    stateMutex_
+                );
+
+                accepted = applyCommand(
+                    command,
+                    payload,
+                    rejectionReason,
+                    successDetail
+                );
+            }
+
+            if (!accepted) {
+                publishCommandStatusAsync(
+                    commandId,
+                    command,
+                    "REJECTED",
+                    rejectionReason
+                );
+
+                std::cerr
+                    << "Command rejected: "
+                    << command
+                    << " ("
+                    << commandId
+                    << ")"
+                    << " | "
+                    << rejectionReason
+                    << '\n';
+
+                return;
+            }
+
+            publishCommandStatusAsync(
+                commandId,
+                command,
+                "ACCEPTED",
+                successDetail
+            );
+
+            std::cout
+                << "Command accepted: "
+                << command
+                << " ("
+                << commandId
+                << ")"
+                << '\n';
+        } catch (const json::exception& error) {
+            publishCommandStatusAsync(
+                commandId,
+                command,
+                "REJECTED",
+                std::string("Invalid JSON: ") +
+                    error.what()
+            );
+
+            std::cerr
+                << "Rejected malformed command payload: "
+                << error.what()
+                << '\n';
+        } catch (const std::exception& error) {
+            publishCommandStatusAsync(
+                commandId,
+                command,
+                "REJECTED",
+                error.what()
+            );
+
+            std::cerr
+                << "Command processing error: "
+                << error.what()
+                << '\n';
+        }
+    }
+
+    bool applyCommand(
+        const std::string& command,
+        const json& payload,
+        std::string& rejectionReason,
+        std::string& successDetail
+    ) {
+        const json parameters =
+            payload.contains("parameters") &&
+            payload["parameters"].is_object()
+                ? payload["parameters"]
+                : json::object();
+
+        const auto readNumericParameter =
+            [&payload, &parameters](
+                const char* name,
+                double& value
+            ) -> bool {
+                const json* source = nullptr;
+
+                if (
+                    parameters.contains(name) &&
+                    parameters[name].is_number()
+                ) {
+                    source = &parameters[name];
+                } else if (
+                    payload.contains(name) &&
+                    payload[name].is_number()
+                ) {
+                    // Backward-compatible fallback for older publishers.
+                    source = &payload[name];
+                }
+
+                if (source == nullptr) {
+                    return false;
+                }
+
+                value = source->get<double>();
+
+                return std::isfinite(value);
+            };
+
+        const auto clearGuidedTargets = [this]() {
+            altitudeCommandActive_ = false;
+            headingCommandActive_ = false;
+        };
+
+        if (command == "START_MISSION") {
+            clearGuidedTargets();
+
+            flightState_ = FlightState::Mission;
+            targetAltitudeM_ = 120.0;
+            targetSpeedMps_ = 14.5;
+
+            return true;
         }
 
-        altitudeM_ += altitudeNoise_(randomEngine_);
-        altitudeM_ = clampValue(
-            altitudeM_,
-            0.0,
-            500.0
+        if (command == "PAUSE_MISSION") {
+            if (flightState_ == FlightState::Landed) {
+                rejectionReason =
+                    "Cannot pause a mission while "
+                    "the aircraft is landed.";
+
+                return false;
+            }
+
+            clearGuidedTargets();
+
+            flightState_ = FlightState::Paused;
+            targetAltitudeM_ = altitudeM_;
+            targetSpeedMps_ = 0.0;
+
+            return true;
+        }
+
+        if (command == "RESUME_MISSION") {
+            if (flightState_ == FlightState::Landed) {
+                rejectionReason =
+                    "Use START_MISSION to launch "
+                    "a landed aircraft.";
+
+                return false;
+            }
+
+            clearGuidedTargets();
+
+            flightState_ = FlightState::Mission;
+            targetAltitudeM_ = 120.0;
+            targetSpeedMps_ = 14.5;
+
+            return true;
+        }
+
+        if (command == "HOVER") {
+            if (flightState_ == FlightState::Landed) {
+                rejectionReason =
+                    "Cannot hover while the "
+                    "aircraft is landed.";
+
+                return false;
+            }
+
+            clearGuidedTargets();
+
+            flightState_ = FlightState::Hover;
+            targetAltitudeM_ = altitudeM_;
+            targetSpeedMps_ = 0.0;
+
+            return true;
+        }
+
+        if (command == "SET_ALTITUDE") {
+            if (flightState_ == FlightState::Landed) {
+                rejectionReason =
+                    "Cannot set altitude while the "
+                    "aircraft is landed.";
+
+                return false;
+            }
+
+            double requestedAltitudeM = 0.0;
+
+            if (
+                !readNumericParameter(
+                    "altitudeM",
+                    requestedAltitudeM
+                )
+            ) {
+                rejectionReason =
+                    "SET_ALTITUDE requires a numeric "
+                    "parameters.altitudeM value.";
+
+                return false;
+            }
+
+            if (
+                requestedAltitudeM < 1.0 ||
+                requestedAltitudeM > 500.0
+            ) {
+                rejectionReason =
+                    "Altitude must be between "
+                    "1 and 500 metres.";
+
+                return false;
+            }
+
+            flightState_ = FlightState::Hover;
+            targetAltitudeM_ = requestedAltitudeM;
+            targetSpeedMps_ = 0.0;
+            altitudeCommandActive_ = true;
+
+            std::ostringstream detail;
+
+            detail
+                << "Altitude target set to "
+                << std::fixed
+                << std::setprecision(1)
+                << targetAltitudeM_
+                << " m.";
+
+            successDetail = detail.str();
+
+            return true;
+        }
+
+        if (command == "SET_HEADING") {
+            if (flightState_ == FlightState::Landed) {
+                rejectionReason =
+                    "Cannot set heading while the "
+                    "aircraft is landed.";
+
+                return false;
+            }
+
+            double requestedHeadingDeg = 0.0;
+
+            if (
+                !readNumericParameter(
+                    "headingDeg",
+                    requestedHeadingDeg
+                )
+            ) {
+                rejectionReason =
+                    "SET_HEADING requires a numeric "
+                    "parameters.headingDeg value.";
+
+                return false;
+            }
+
+            if (
+                requestedHeadingDeg < 0.0 ||
+                requestedHeadingDeg > 360.0
+            ) {
+                rejectionReason =
+                    "Heading must be between "
+                    "0 and 360 degrees.";
+
+                return false;
+            }
+
+            if (requestedHeadingDeg == 360.0) {
+                requestedHeadingDeg = 0.0;
+            }
+
+            flightState_ = FlightState::Hover;
+            targetHeadingDeg_ = requestedHeadingDeg;
+            targetSpeedMps_ = 0.0;
+            headingCommandActive_ = true;
+
+            std::ostringstream detail;
+
+            detail
+                << "Heading target set to "
+                << std::fixed
+                << std::setprecision(1)
+                << targetHeadingDeg_
+                << " degrees.";
+
+            successDetail = detail.str();
+
+            return true;
+        }
+
+        if (
+            command == "RETURN_TO_HOME" ||
+            command == "RETURN_TO_BASE"
+        ) {
+            if (flightState_ == FlightState::Landed) {
+                rejectionReason =
+                    "Aircraft is already landed.";
+
+                return false;
+            }
+
+            clearGuidedTargets();
+
+            altitudeCommandActive_ = false;
+            headingCommandActive_ = false;
+
+            flightState_ =
+                FlightState::ReturnToHome;
+
+            targetAltitudeM_ = 35.0;
+            targetSpeedMps_ = 8.0;
+
+            return true;
+        }
+
+        if (command == "LAND") {
+            if (flightState_ == FlightState::Landed) {
+                rejectionReason =
+                    "Aircraft is already landed.";
+
+                return false;
+            }
+
+            clearGuidedTargets();
+
+            flightState_ = FlightState::Landing;
+            targetAltitudeM_ = 0.0;
+            targetSpeedMps_ = 0.0;
+
+            return true;
+        }
+
+        rejectionReason =
+            "Unsupported command. Supported commands are "
+            "START_MISSION, PAUSE_MISSION, RESUME_MISSION, "
+            "HOVER, SET_ALTITUDE, SET_HEADING, "
+            "RETURN_TO_HOME, and LAND.";
+
+        return false;
+    }
+
+    void updateAircraftState() {
+        std::lock_guard<std::mutex> lock(
+            stateMutex_
         );
 
-        headingDeg_ +=
-            0.35 + headingNoise_(randomEngine_);
+        if (
+            batteryPercent_ <= 15.0 &&
+            flightState_ != FlightState::Landing &&
+            flightState_ != FlightState::Landed
+        ) {
+            flightState_ =
+                FlightState::ReturnToHome;
 
-        if (headingDeg_ >= 360.0) {
-            headingDeg_ -= 360.0;
+            targetAltitudeM_ = 35.0;
+            targetSpeedMps_ = 8.0;
         }
 
-        if (headingDeg_ < 0.0) {
-            headingDeg_ += 360.0;
+        switch (flightState_) {
+            case FlightState::Mission:
+                targetAltitudeM_ = 120.0;
+                targetSpeedMps_ = 14.5;
+                updateMissionPosition();
+                break;
+
+            case FlightState::Hover:
+            case FlightState::Paused:
+                if (!altitudeCommandActive_) {
+                    targetAltitudeM_ = altitudeM_;
+                }
+
+                targetSpeedMps_ = 0.0;
+                break;
+
+            case FlightState::ReturnToHome:
+                targetAltitudeM_ = 35.0;
+                targetSpeedMps_ = 8.0;
+                updateReturnHomePosition();
+                break;
+
+            case FlightState::Landing:
+                targetAltitudeM_ = 0.0;
+                targetSpeedMps_ = 0.0;
+
+                if (altitudeM_ <= 0.5) {
+                    altitudeM_ = 0.0;
+                    targetAltitudeM_ = 0.0;
+                    targetSpeedMps_ = 0.0;
+                    flightState_ = FlightState::Landed;
+                }
+
+                break;
+
+            case FlightState::Landed:
+                altitudeM_ = 0.0;
+                targetAltitudeM_ = 0.0;
+                speedMps_ = 0.0;
+                targetSpeedMps_ = 0.0;
+                break;
         }
 
-        speedMps_ = clampValue(
-            speedMps_ + speedNoise_(randomEngine_),
-            0.0,
-            28.0
+        if (flightState_ != FlightState::Landed) {
+            altitudeM_ = moveToward(
+                altitudeM_,
+                targetAltitudeM_,
+                flightState_ == FlightState::Landing
+                    ? 2.5
+                    : 1.8
+            );
+
+            altitudeM_ +=
+                altitudeNoise_(randomEngine_);
+
+            altitudeM_ = clampValue(
+                altitudeM_,
+                0.0,
+                500.0
+            );
+
+            if (
+                altitudeCommandActive_ &&
+                std::abs(
+                    targetAltitudeM_ -
+                    altitudeM_
+                ) <= 0.75
+            ) {
+                altitudeM_ = targetAltitudeM_;
+                altitudeCommandActive_ = false;
+            }
+        }
+
+        if (headingCommandActive_) {
+            double headingDifference =
+                std::fmod(
+                    targetHeadingDeg_ -
+                    headingDeg_ +
+                    540.0,
+                    360.0
+                ) -
+                180.0;
+
+            if (std::abs(headingDifference) <= 2.5) {
+                headingDeg_ = targetHeadingDeg_;
+                headingCommandActive_ = false;
+            } else {
+                headingDeg_ +=
+                    std::copysign(
+                        std::min(
+                            std::abs(headingDifference),
+                            2.5
+                        ),
+                        headingDifference
+                    );
+            }
+        } else if (
+            flightState_ == FlightState::Mission ||
+            flightState_ == FlightState::ReturnToHome
+        ) {
+            headingDeg_ +=
+                0.35 +
+                headingNoise_(randomEngine_);
+        }
+
+        headingDeg_ =
+            std::fmod(
+                headingDeg_ + 360.0,
+                360.0
+            );
+
+        speedMps_ = moveToward(
+            speedMps_,
+            targetSpeedMps_,
+            0.8
         );
+
+        if (
+            flightState_ == FlightState::Mission ||
+            flightState_ == FlightState::ReturnToHome
+        ) {
+            speedMps_ = clampValue(
+                speedMps_ +
+                    speedNoise_(randomEngine_),
+                0.0,
+                28.0
+            );
+        } else {
+            speedMps_ = clampValue(
+                speedMps_,
+                0.0,
+                28.0
+            );
+        }
+
+        const double batteryDrain =
+            flightState_ == FlightState::Landed
+                ? 0.001
+                : 0.015;
 
         batteryPercent_ = clampValue(
-            batteryPercent_ - 0.015,
+            batteryPercent_ - batteryDrain,
             0.0,
             100.0
         );
@@ -233,101 +904,176 @@ private:
                 -35.0
             )
         );
+    }
 
+    void updateMissionPosition() {
         latitude_ += 0.0000025;
         longitude_ += 0.0000018;
+    }
 
-        if (batteryPercent_ <= 15.0) {
-            flightMode_ = "RETURN_TO_BASE";
-            targetAltitudeM_ = 35.0;
-            speedMps_ = 8.0;
+    void updateReturnHomePosition() {
+        latitude_ = moveToward(
+            latitude_,
+            HOME_LATITUDE,
+            0.000006
+        );
+
+        longitude_ = moveToward(
+            longitude_,
+            HOME_LONGITUDE,
+            0.000006
+        );
+
+        const double latitudeDifference =
+            HOME_LATITUDE - latitude_;
+
+        const double longitudeDifference =
+            HOME_LONGITUDE - longitude_;
+
+        if (
+            std::abs(latitudeDifference) < 0.00001 &&
+            std::abs(longitudeDifference) < 0.00001
+        ) {
+            latitude_ = HOME_LATITUDE;
+            longitude_ = HOME_LONGITUDE;
+
+            flightState_ = FlightState::Hover;
+
+            targetAltitudeM_ = altitudeM_;
+            targetSpeedMps_ = 0.0;
         }
     }
 
     void publishTelemetry() {
-        sequence_ += 1;
+        json payload;
 
-        const double voltage =
-            22.0 + batteryPercent_ * 0.018;
+        unsigned long long sequence = 0;
 
-        const json payload = {
-            {"schemaVersion", 1},
-            {"droneId", droneId_},
-            {"timestamp", createIsoTimestamp()},
-            {"sequence", sequence_},
+        std::string flightMode;
 
-            {
-                "position",
+        double altitude = 0.0;
+        double battery = 0.0;
+        double heading = 0.0;
+        double speed = 0.0;
+
+        {
+            std::lock_guard<std::mutex> lock(
+                stateMutex_
+            );
+
+            sequence_ += 1;
+            sequence = sequence_;
+
+            const double voltage =
+                22.0 +
+                batteryPercent_ * 0.018;
+
+            flightMode =
+                flightStateToString(flightState_);
+
+            altitude = altitudeM_;
+            battery = batteryPercent_;
+            heading = headingDeg_;
+            speed = speedMps_;
+
+            payload = {
+                {"schemaVersion", 1},
+                {"droneId", droneId_},
+                {"timestamp", createIsoTimestamp()},
+                {"sequence", sequence},
                 {
-                    {"latitude", latitude_},
-                    {"longitude", longitude_},
-                    {"altitudeM", altitudeM_}
-                }
-            },
-
-            {
-                "motion",
+                    "position",
+                    {
+                        {"latitude", latitude_},
+                        {"longitude", longitude_},
+                        {"altitudeM", altitudeM_}
+                    }
+                },
                 {
-                    {"speedMps", speedMps_},
-                    {"headingDeg", headingDeg_}
-                }
-            },
-
-            {
-                "power",
+                    "motion",
+                    {
+                        {"speedMps", speedMps_},
+                        {"headingDeg", headingDeg_}
+                    }
+                },
                 {
-                    {"batteryPercent", batteryPercent_},
-                    {"voltageV", voltage}
-                }
-            },
-
-            {
-                "health",
+                    "power",
+                    {
+                        {
+                            "batteryPercent",
+                            batteryPercent_
+                        },
+                        {"voltageV", voltage}
+                    }
+                },
                 {
-                    {"temperatureC", temperatureC_},
-                    {"signalDbm", signalDbm_},
-                    {"gpsFix", true}
-                }
-            },
+                    "health",
+                    {
+                        {
+                            "temperatureC",
+                            temperatureC_
+                        },
+                        {"signalDbm", signalDbm_},
+                        {"gpsFix", true}
+                    }
+                },
+                {"flightMode", flightMode}
+            };
+        }
 
-            {"flightMode", flightMode_}
-        };
+        if (!client_.is_connected()) {
+            return;
+        }
 
-        const auto message = mqtt::make_message(
-            telemetryTopic_,
-            payload.dump()
-        );
+        try {
+            const auto message =
+                mqtt::make_message(
+                    telemetryTopic_,
+                    payload.dump()
+                );
 
-        message->set_qos(QOS);
-        message->set_retained(false);
+            message->set_qos(QOS);
+            message->set_retained(false);
 
-        client_.publish(message)->wait();
+            client_.publish(message)->wait();
 
-        std::cout
-            << "["
-            << sequence_
-            << "] "
-            << droneId_
-            << " | altitude="
-            << std::fixed
-            << std::setprecision(1)
-            << altitudeM_
-            << " m"
-            << " | battery="
-            << batteryPercent_
-            << "%"
-            << " | heading="
-            << headingDeg_
-            << " deg"
-            << " | speed="
-            << speedMps_
-            << " m/s"
-            << '\n';
+            std::cout
+                << "["
+                << sequence
+                << "] "
+                << droneId_
+                << " | mode="
+                << flightMode
+                << " | altitude="
+                << std::fixed
+                << std::setprecision(1)
+                << altitude
+                << " m"
+                << " | battery="
+                << battery
+                << "%"
+                << " | heading="
+                << heading
+                << " deg"
+                << " | speed="
+                << speed
+                << " m/s"
+                << '\n';
+        } catch (const mqtt::exception& error) {
+            std::cerr
+                << "Telemetry publish error: "
+                << error.what()
+                << '\n';
+        }
     }
 
-    void publishStatus(
+    void publishStatusBlocking(
         const std::string& status
     ) {
+        if (!client_.is_connected()) {
+            return;
+        }
+
         const json payload = {
             {"schemaVersion", 1},
             {"droneId", droneId_},
@@ -335,10 +1081,11 @@ private:
             {"timestamp", createIsoTimestamp()}
         };
 
-        const auto message = mqtt::make_message(
-            statusTopic_,
-            payload.dump()
-        );
+        const auto message =
+            mqtt::make_message(
+                statusTopic_,
+                payload.dump()
+            );
 
         message->set_qos(QOS);
         message->set_retained(true);
@@ -346,35 +1093,112 @@ private:
         client_.publish(message)->wait();
     }
 
+    void publishCommandStatusAsync(
+        const std::string& commandId,
+        const std::string& command,
+        const std::string& status,
+        const std::string& detail
+    ) {
+        if (!client_.is_connected()) {
+            return;
+        }
+
+        std::string flightMode;
+
+        {
+            std::lock_guard<std::mutex> lock(
+                stateMutex_
+            );
+
+            flightMode =
+                flightStateToString(flightState_);
+        }
+
+        const json payload = {
+            {"schemaVersion", 1},
+            {"commandId", commandId},
+            {"droneId", droneId_},
+            {"command", command},
+            {"status", status},
+            {"detail", detail},
+            {"flightMode", flightMode},
+            {"timestamp", createIsoTimestamp()}
+        };
+
+        try {
+            const auto message =
+                mqtt::make_message(
+                    commandStatusTopic_,
+                    payload.dump()
+                );
+
+            message->set_qos(QOS);
+            message->set_retained(false);
+
+            // Do not call wait() here.
+            // This method runs from the MQTT callback thread.
+            client_.publish(message);
+        } catch (const mqtt::exception& error) {
+            std::cerr
+                << "Command status publish error: "
+                << error.what()
+                << '\n';
+        }
+    }
+
     std::string brokerUrl_;
     std::string droneId_;
     std::string clientId_;
+
     std::string telemetryTopic_;
     std::string statusTopic_;
+    std::string commandTopic_;
+    std::string commandStatusTopic_;
 
     mqtt::async_client client_;
 
+    std::mutex stateMutex_;
+
     std::mt19937 randomEngine_;
-    std::uniform_real_distribution<double> altitudeNoise_;
-    std::uniform_real_distribution<double> headingNoise_;
-    std::uniform_real_distribution<double> speedNoise_;
-    std::uniform_real_distribution<double> temperatureNoise_;
-    std::uniform_int_distribution<int> signalNoise_;
+
+    std::uniform_real_distribution<double>
+        altitudeNoise_;
+
+    std::uniform_real_distribution<double>
+        headingNoise_;
+
+    std::uniform_real_distribution<double>
+        speedNoise_;
+
+    std::uniform_real_distribution<double>
+        temperatureNoise_;
+
+    std::uniform_int_distribution<int>
+        signalNoise_;
 
     unsigned long long sequence_ = 0;
 
-    double latitude_ = 48.4284;
-    double longitude_ = -123.3656;
+    double latitude_ = HOME_LATITUDE;
+    double longitude_ = HOME_LONGITUDE;
+
     double altitudeM_ = 120.0;
     double targetAltitudeM_ = 120.0;
+    bool altitudeCommandActive_ = false;
+
     double headingDeg_ = 180.0;
+    double targetHeadingDeg_ = 180.0;
+    bool headingCommandActive_ = false;
+
     double speedMps_ = 14.5;
+    double targetSpeedMps_ = 14.5;
+
     double batteryPercent_ = 100.0;
     double temperatureC_ = 34.0;
 
     int signalDbm_ = -54;
 
-    std::string flightMode_ = "MISSION";
+    FlightState flightState_ =
+        FlightState::Mission;
 };
 
 } // namespace

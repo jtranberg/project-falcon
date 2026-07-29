@@ -361,12 +361,139 @@ app.delete("/api/devices/:deviceId", (request, response) => {
   });
 });
 
+/**
+ * ------------------------------------------------------------
+ * Real-time Drone Console Connection
+ * ------------------------------------------------------------
+ *
+ * The Drone Console connects through Socket.IO. Telemetry flows from
+ * MQTT to the gateway and then out to connected browser clients.
+ * Commands flow in the opposite direction: browser -> gateway -> MQTT.
+ */
 io.on("connection", (socket) => {
+  console.log(`Socket connected: ${socket.id}`);
+
   socket.emit("fleet:snapshot", fleetSnapshot());
 
   socket.emit("registry:snapshot", {
     devices: deviceRegistry.getAllDevices(),
     summary: deviceRegistry.getSummary(),
+  });
+
+  /**
+   * Receive a flight command from the Drone Console and publish it to
+   * the target drone's MQTT command topic.
+   */
+  socket.on(
+    "drone:command",
+    (
+      payload: {
+        droneId?: string;
+        command?: string;
+        parameters?: Record<string, number>;
+        timestamp?: string;
+        issuedAt?: string;
+      },
+      callback?: (response: {
+        success: boolean;
+        commandId?: string;
+        droneId?: string;
+        command?: string;
+        message?: string;
+      }) => void,
+    ) => {
+      console.log("Drone command received:", payload);
+
+      const droneId = payload.droneId?.trim();
+      const command = payload.command?.trim().toUpperCase();
+
+      if (!droneId || !command) {
+        const message = "Drone ID and command are required.";
+
+        console.error(message, payload);
+
+        callback?.({
+          success: false,
+          message,
+        });
+
+        socket.emit("command:error", {
+          droneId: droneId ?? "",
+          command: command ?? "",
+          message,
+        });
+
+        return;
+      }
+
+      // Each aircraft listens only to its own command topic.
+      const topic = `falcon/drones/${droneId}/commands`;
+
+      // Keep the MQTT payload small, explicit, and timestamped.
+      const commandPayload = {
+        commandId: randomUUID(),
+        droneId,
+        command,
+        parameters: payload.parameters,
+        timestamp:
+          payload.timestamp ??
+          payload.issuedAt ??
+          new Date().toISOString(),
+      };
+
+      mqttClient.publish(
+        topic,
+        JSON.stringify(commandPayload),
+        {
+          qos: 1,
+        },
+        (error) => {
+          if (error) {
+            console.error(
+              `Failed to publish ${command} for ${droneId}:`,
+              error.message,
+            );
+
+            callback?.({
+              success: false,
+              message: error.message,
+            });
+
+            socket.emit("command:error", {
+              droneId,
+              command,
+              message: error.message,
+            });
+
+            return;
+          }
+
+          console.log(
+            `Published ${command} for ${droneId} to ${topic}.`,
+          );
+
+          // Acknowledge the browser request only after MQTT confirms
+          // that the message was accepted for publishing.
+          callback?.({
+            success: true,
+            commandId: commandPayload.commandId,
+            droneId,
+            command,
+          });
+
+          socket.emit("command:dispatched", {
+            droneId,
+            command,
+            topic,
+            timestamp: commandPayload.timestamp,
+          });
+        },
+      );
+    },
+  );
+
+  socket.on("disconnect", (reason) => {
+    console.log(`Socket disconnected: ${socket.id} (${reason})`);
   });
 });
 

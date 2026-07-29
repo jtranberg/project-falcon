@@ -8,6 +8,7 @@ project(
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(PahoMqttCpp REQUIRED)
 find_package(nlohmann_json REQUIRED)
@@ -28,20 +29,21 @@ target_compile_definitions(
     falcon-drone
     PRIVATE
         _CRT_SECURE_NO_WARNINGS
+        $<$<PLATFORM_ID:Windows>:PAHO_MQTTPP_IMPORTS>
 )
 
 if(MSVC)
     target_compile_options(
         falcon-drone
         PRIVATE
-        /W4
+            /W4
     )
 else()
     target_compile_options(
         falcon-drone
         PRIVATE
-        -Wall
-        -Wextra
-        -pedantic
+            -Wall
+            -Wextra
+            -pedantic
     )
 endif()
