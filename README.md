@@ -5,9 +5,14 @@
   <img
     src="./apps/dashboard/public/falcon-icon.png"
     alt="Project Falcon"
-    width="170"
+    width="300"
   />
 </p>
+
+<h1 align="center">
+Project Falcon
+</h1>
+
 
 <h2 align="center">
 Mission Control for Connected Devices
@@ -39,6 +44,8 @@ Mission Control for Connected Devices
     width="100%"
   />
 </p>
+
+Event-Driven • MQTT • gRPC • MongoDB • Socket.IO • React
 
 ---
 
@@ -141,7 +148,7 @@ Although the current implementation simulates autonomous aircraft, the platform 
 
 ---
 
-# Current Capabilities
+# Platform Capabilitiesities
 
 ## Real-Time Telemetry
 
@@ -330,7 +337,7 @@ Project Falcon demonstrates modern enterprise software engineering practices, in
 
 # Repository Structure
 
-```text
+
 project-falcon/
 │
 ├── apps/
@@ -349,7 +356,7 @@ project-falcon/
 ├── docker-compose.yml
 ├── package.json
 └── README.md
-```
+
 
 ---
 
