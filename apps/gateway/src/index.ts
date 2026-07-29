@@ -497,8 +497,19 @@ io.on("connection", (socket) => {
   });
 });
 
+const mqttUsername = process.env.MQTT_USERNAME;
+const mqttPassword = process.env.MQTT_PASSWORD;
+
+if (mqttUrl.startsWith("mqtts://") && (!mqttUsername || !mqttPassword)) {
+  throw new Error(
+    "MQTT_USERNAME and MQTT_PASSWORD are required for a TLS MQTT connection."
+  );
+}
+
 const mqttClient = mqtt.connect(mqttUrl, {
   clientId: `falcon-gateway-${randomUUID()}`,
+  username: mqttUsername,
+  password: mqttPassword,
   reconnectPeriod: 1_000,
   clean: true,
 });

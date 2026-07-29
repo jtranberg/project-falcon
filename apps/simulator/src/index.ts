@@ -15,6 +15,9 @@ type DroneState = {
 };
 
 const mqttUrl = process.env.MQTT_URL ?? "mqtt://localhost:1883";
+const mqttUsername = process.env.MQTT_USERNAME;
+const mqttPassword = process.env.MQTT_PASSWORD;
+
 const droneCount = Number(process.env.SIMULATOR_DRONES ?? 4);
 const intervalMs = Number(process.env.SIMULATOR_INTERVAL_MS ?? 500);
 
@@ -26,10 +29,18 @@ if (!Number.isFinite(intervalMs) || intervalMs < 100) {
   throw new Error("SIMULATOR_INTERVAL_MS must be at least 100.");
 }
 
+if (mqttUrl.startsWith("mqtts://") && (!mqttUsername || !mqttPassword)) {
+  throw new Error(
+    "MQTT_USERNAME and MQTT_PASSWORD are required for a TLS MQTT connection."
+  );
+}
+
 const client = mqtt.connect(mqttUrl, {
-  clientId: `falcon-simulator-${crypto.randomUUID()}`,
+  clientId: `falcon-drone-client-${crypto.randomUUID()}`,
+  username: mqttUsername,
+  password: mqttPassword,
   reconnectPeriod: 1_000,
-  clean: true
+  clean: true,
 });
 
 const drones: DroneState[] = Array.from({ length: droneCount }, (_, index) => ({
@@ -42,7 +53,7 @@ const drones: DroneState[] = Array.from({ length: droneCount }, (_, index) => ({
   batteryPercent: 100 - index * 4,
   temperatureC: 36 + index,
   signalDbm: -52 - index * 3,
-  flightMode: "MISSION"
+  flightMode: "MISSION",
 }));
 
 function clamp(value: number, min: number, max: number): number {
@@ -53,15 +64,29 @@ function nextTelemetry(drone: DroneState) {
   drone.headingDeg = (drone.headingDeg + Math.random() * 8 - 4 + 360) % 360;
   drone.speedMps = clamp(drone.speedMps + Math.random() * 1.2 - 0.6, 0, 28);
   drone.altitudeM = clamp(drone.altitudeM + Math.random() * 4 - 2, 5, 180);
-  drone.temperatureC = clamp(drone.temperatureC + Math.random() * 0.6 - 0.3, 20, 85);
-  drone.signalDbm = clamp(drone.signalDbm + Math.random() * 4 - 2, -110, -35);
-  drone.batteryPercent = clamp(drone.batteryPercent - Math.random() * 0.06, 0, 100);
+  drone.temperatureC = clamp(
+    drone.temperatureC + Math.random() * 0.6 - 0.3,
+    20,
+    85
+  );
+  drone.signalDbm = clamp(
+    drone.signalDbm + Math.random() * 4 - 2,
+    -110,
+    -35
+  );
+  drone.batteryPercent = clamp(
+    drone.batteryPercent - Math.random() * 0.06,
+    0,
+    100
+  );
 
   const distanceKm = (drone.speedMps * intervalMs) / 1_000 / 1_000;
   const headingRad = (drone.headingDeg * Math.PI) / 180;
+
   drone.latitude += (distanceKm / 111) * Math.cos(headingRad);
   drone.longitude +=
-    (distanceKm / (111 * Math.cos((drone.latitude * Math.PI) / 180))) *
+    (distanceKm /
+      (111 * Math.cos((drone.latitude * Math.PI) / 180))) *
     Math.sin(headingRad);
 
   if (drone.batteryPercent < 18) {
@@ -80,27 +105,29 @@ function nextTelemetry(drone: DroneState) {
     position: {
       latitude: Number(drone.latitude.toFixed(6)),
       longitude: Number(drone.longitude.toFixed(6)),
-      altitudeM: Number(drone.altitudeM.toFixed(2))
+      altitudeM: Number(drone.altitudeM.toFixed(2)),
     },
     motion: {
       speedMps: Number(drone.speedMps.toFixed(2)),
-      headingDeg: Number(drone.headingDeg.toFixed(2))
+      headingDeg: Number(drone.headingDeg.toFixed(2)),
     },
     power: {
       batteryPercent: Number(drone.batteryPercent.toFixed(2)),
-      voltageV: Number((19.2 + drone.batteryPercent * 0.048).toFixed(2))
+      voltageV: Number((19.2 + drone.batteryPercent * 0.048).toFixed(2)),
     },
     health: {
       temperatureC: Number(drone.temperatureC.toFixed(2)),
       signalDbm: Number(drone.signalDbm.toFixed(2)),
-      gpsFix: true
+      gpsFix: true,
     },
-    flightMode: drone.flightMode
+    flightMode: drone.flightMode,
   };
 }
 
 client.on("connect", () => {
-  console.log(`Simulator connected to ${mqttUrl}. Publishing ${droneCount} drones every ${intervalMs} ms.`);
+  console.log(
+    `Drone Client connected to ${mqttUrl}. Publishing ${droneCount} drones every ${intervalMs} ms.`
+  );
 
   setInterval(() => {
     for (const drone of drones) {
@@ -109,12 +136,12 @@ client.on("connect", () => {
 
       client.publish(topic, JSON.stringify(telemetry), {
         qos: 0,
-        retain: false
+        retain: false,
       });
     }
   }, intervalMs);
 });
 
 client.on("error", (error) => {
-  console.error("MQTT simulator error:", error.message);
+  console.error("MQTT Drone Client error:", error.message);
 });
