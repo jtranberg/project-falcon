@@ -17,6 +17,21 @@ import { io } from "socket.io-client";
 import "leaflet/dist/leaflet.css";
 import "./styles.css";
 
+type RegisteredDevice = {
+  id: string;
+  name: string;
+  serialNumber: string;
+  manufacturer: string;
+  model: string;
+  firmwareVersion: string;
+  owner: string;
+  status: "ONLINE" | "OFFLINE";
+  healthState: string;
+  healthScore: number;
+  telemetryCount: number;
+  lastSeenAt: string;
+};
+
 type Alert = {
   code: string;
   severity: "WARNING" | "CRITICAL" | string;
@@ -136,6 +151,8 @@ function App() {
     null
   );
 
+  const [devices, setDevices] = React.useState<RegisteredDevice[]>([]);
+
   React.useEffect(() => {
     function handleConnect() {
       setConnected(true);
@@ -171,6 +188,35 @@ function App() {
         });
       }
     }
+
+    async function loadRegistry() {
+      const response = await fetch(`${gatewayUrl}/api/devices`);
+
+      if (!response.ok) {
+        return;
+      }
+
+      const json = await response.json();
+
+      setDevices(json.devices);
+    }
+
+    void loadRegistry();
+    socket.on("registry:snapshot", (payload) => {
+      setDevices(payload.devices);
+    });
+
+    socket.on("device:updated", (payload) => {
+      setDevices((current) => {
+        const filtered = current.filter(
+          (device) => device.id !== payload.device.id
+        );
+
+        return [...filtered, payload.device].sort((a, b) =>
+          a.name.localeCompare(b.name)
+        );
+      });
+    });
 
     function handleTelemetry(item: DroneEnvelope) {
       const { droneId, position } = item.telemetry;
@@ -223,9 +269,9 @@ function App() {
     drones.length === 0
       ? 0
       : drones.reduce(
-          (sum, drone) => sum + (drone.latencyMs ?? 0),
-          0
-        ) / drones.length;
+        (sum, drone) => sum + (drone.latencyMs ?? 0),
+        0
+      ) / drones.length;
 
   const selectedDrone =
     (selectedDroneId ? fleet[selectedDroneId] : undefined) ?? drones[0];
@@ -528,6 +574,41 @@ function App() {
         </div>
       </section>
 
+      <section className="section-heading">
+        <div>
+          <p className="eyebrow">DEVICE MANAGEMENT</p>
+          <h2>Fleet Registry</h2>
+        </div>
+      </section>
+
+      <section className="registry-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Status</th>
+              <th>Health</th>
+              <th>Firmware</th>
+              <th>Model</th>
+              <th>Telemetry</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {devices.map((device) => (
+              <tr key={device.id}>
+                <td>{device.name}</td>
+                <td>{device.status}</td>
+                <td>{device.healthScore}%</td>
+                <td>{device.firmwareVersion}</td>
+                <td>{device.model}</td>
+                <td>{device.telemetryCount}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
       <section className="fleet-grid">
         {drones.length === 0 ? (
           <article className="empty-state">
@@ -536,11 +617,10 @@ function App() {
         ) : (
           drones.map(({ telemetry, alerts, latencyMs }) => (
             <article
-              className={`drone-card ${
-                selectedDroneId === telemetry.droneId
+              className={`drone-card ${selectedDroneId === telemetry.droneId
                   ? "drone-card-selected"
                   : ""
-              }`}
+                }`}
               key={telemetry.droneId}
               onClick={() => {
                 setSelectedDroneId(telemetry.droneId);
