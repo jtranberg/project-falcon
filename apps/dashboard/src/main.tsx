@@ -26,10 +26,42 @@ type RegisteredDevice = {
   firmwareVersion: string;
   owner: string;
   status: "ONLINE" | "OFFLINE";
-  healthState: "HEALTHY" | "DEGRADED" | "CRITICAL" | "OFFLINE" | string;
+  healthState:
+  | "HEALTHY"
+  | "DEGRADED"
+  | "CRITICAL"
+  | "OFFLINE"
+  | string;
   healthScore: number;
-  telemetryCount: number;
+  firstSeenAt: string;
   lastSeenAt: string;
+  telemetryCount: number;
+  totalFlightHours: number;
+  missionsCompleted: number;
+  sensors: string[];
+  latestTelemetry: {
+    latitude: number;
+    longitude: number;
+    altitude: number;
+    speed: number;
+    heading: number;
+    battery: number;
+    voltage: number;
+    signalStrength: number;
+    temperature: number;
+    flightMode: string;
+    timestamp: string;
+  };
+};
+
+type DeviceProfileDraft = {
+  name: string;
+  manufacturer: string;
+  model: string;
+  firmwareVersion: string;
+  owner: string;
+  totalFlightHours: number;
+  missionsCompleted: number;
 };
 
 type RegistrySnapshotPayload = {
@@ -190,6 +222,112 @@ function App() {
     null
   );
 
+  const [editingDevice, setEditingDevice] = React.useState(false);
+
+  const [deviceDraft, setDeviceDraft] =
+    React.useState<DeviceProfileDraft | null>(null);
+
+  const [savingDevice, setSavingDevice] = React.useState(false);
+
+  const [deviceSaveError, setDeviceSaveError] =
+    React.useState<string | null>(null);
+
+  const [selectedDeviceId, setSelectedDeviceId] =
+    React.useState<string | null>(null);
+
+
+  function beginEditingDevice(): void {
+    if (!selectedDevice) {
+      return;
+    }
+
+    setDeviceDraft({
+      name: selectedDevice.name,
+      manufacturer: selectedDevice.manufacturer,
+      model: selectedDevice.model,
+      firmwareVersion: selectedDevice.firmwareVersion,
+      owner: selectedDevice.owner,
+      totalFlightHours: selectedDevice.totalFlightHours,
+      missionsCompleted: selectedDevice.missionsCompleted
+    });
+
+    setDeviceSaveError(null);
+    setEditingDevice(true);
+  }
+
+  function cancelEditingDevice(): void {
+    setEditingDevice(false);
+    setDeviceDraft(null);
+    setDeviceSaveError(null);
+  }
+
+  function updateDeviceDraft<K extends keyof DeviceProfileDraft>(
+    field: K,
+    value: DeviceProfileDraft[K]
+  ): void {
+    setDeviceDraft((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [field]: value
+      };
+    });
+  }
+
+  async function saveDeviceProfile(): Promise<void> {
+    if (!selectedDevice || !deviceDraft || savingDevice) {
+      return;
+    }
+
+    setSavingDevice(true);
+    setDeviceSaveError(null);
+
+    try {
+      const response = await fetch(
+        `${gatewayUrl}/api/devices/${encodeURIComponent(selectedDevice.id)}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(deviceDraft)
+        }
+      );
+
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          payload.message ?? `Device update failed with status ${response.status}.`
+        );
+      }
+
+      const updatedDevice = payload.device as RegisteredDevice;
+
+      setDevices((current) =>
+        current
+          .map((device) =>
+            device.id === updatedDevice.id ? updatedDevice : device
+          )
+          .sort((first, second) => first.name.localeCompare(second.name))
+      );
+
+      setEditingDevice(false);
+      setDeviceDraft(null);
+    } catch (error) {
+      setDeviceSaveError(
+        error instanceof Error
+          ? error.message
+          : "The device profile could not be saved."
+      );
+    } finally {
+      setSavingDevice(false);
+    }
+  }
+
   React.useEffect(() => {
     function handleConnect() {
       setConnected(true);
@@ -251,6 +389,8 @@ function App() {
       setSelectedDroneId((current) => current ?? droneId);
       setLastEventAt(new Date().toLocaleTimeString());
     }
+
+
 
     function handleRegistrySnapshot(payload: RegistrySnapshotPayload) {
       setDevices(
@@ -327,12 +467,15 @@ function App() {
     drones.length === 0
       ? 0
       : drones.reduce(
-          (sum, drone) => sum + (drone.latencyMs ?? 0),
-          0
-        ) / drones.length;
+        (sum, drone) => sum + (drone.latencyMs ?? 0),
+        0
+      ) / drones.length;
 
   const selectedDrone =
     (selectedDroneId ? fleet[selectedDroneId] : undefined) ?? drones[0];
+
+  const selectedDevice =
+    devices.find((device) => device.id === selectedDeviceId) ?? null;
 
   return (
     <main className="shell">
@@ -621,8 +764,18 @@ function App() {
             <article
               className={`registry-card registry-card-${device.status.toLowerCase()}`}
               key={device.id}
+              role="button"
+              tabIndex={0}
               onClick={() => {
                 setSelectedDroneId(device.id);
+                setSelectedDeviceId(device.id);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setSelectedDroneId(device.id);
+                  setSelectedDeviceId(device.id);
+                }
               }}
             >
               <header className="registry-header">
@@ -633,11 +786,10 @@ function App() {
                 </div>
 
                 <span
-                  className={`registry-status ${
-                    device.status === "ONLINE"
-                      ? "registry-online"
-                      : "registry-offline"
-                  }`}
+                  className={`registry-status ${device.status === "ONLINE"
+                    ? "registry-online"
+                    : "registry-offline"
+                    }`}
                 >
                   <i />
                   {device.status}
@@ -697,11 +849,10 @@ function App() {
         ) : (
           drones.map(({ telemetry, alerts, latencyMs }) => (
             <article
-              className={`drone-card ${
-                selectedDroneId === telemetry.droneId
-                  ? "drone-card-selected"
-                  : ""
-              }`}
+              className={`drone-card ${selectedDroneId === telemetry.droneId
+                ? "drone-card-selected"
+                : ""
+                }`}
               key={telemetry.droneId}
               onClick={() => {
                 setSelectedDroneId(telemetry.droneId);
@@ -719,6 +870,8 @@ function App() {
                   {telemetry.flightMode.replaceAll("_", " ")}
                 </span>
               </div>
+
+
 
               <div className="telemetry-grid">
                 <div>
@@ -787,6 +940,363 @@ function App() {
           ))
         )}
       </section>
+
+      {selectedDevice && (
+        <div
+          className="device-drawer-backdrop"
+          role="presentation"
+          onClick={() => {
+            cancelEditingDevice();
+            setSelectedDeviceId(null);
+          }}
+        >
+          <aside
+            className="device-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="device-profile-title"
+            onClick={(event) => {
+              event.stopPropagation();
+            }}
+          >
+            <header className="device-drawer-header">
+              <div>
+                <p className="eyebrow">DEVICE PROFILE</p>
+                <h2 id="device-profile-title">{selectedDevice.name}</h2>
+                <span className="device-serial">
+                  {selectedDevice.serialNumber}
+                </span>
+              </div>
+
+              <div className="device-drawer-actions">
+                {!editingDevice && (
+                  <button
+                    className="device-edit-button"
+                    type="button"
+                    onClick={beginEditingDevice}
+                  >
+                    Edit Profile
+                  </button>
+                )}
+
+                <button
+                  className="device-drawer-close"
+                  type="button"
+                  aria-label="Close device profile"
+                  onClick={() => {
+                    cancelEditingDevice();
+                    setSelectedDeviceId(null);
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+
+            </header>
+
+            <div className="device-profile-status">
+              <span
+                className={`registry-status ${selectedDevice.status === "ONLINE"
+                  ? "registry-online"
+                  : "registry-offline"
+                  }`}
+              >
+                <i />
+                {selectedDevice.status}
+              </span>
+
+              <span
+                className={`device-health device-health-${selectedDevice.healthState.toLowerCase()}`}
+              >
+                {selectedDevice.healthState}
+              </span>
+
+              <strong>{selectedDevice.healthScore}% Health</strong>
+            </div>
+
+            <section className="device-profile-section">
+              <div className="device-profile-heading">
+                <span>IDENTITY</span>
+              </div>
+
+              {editingDevice && deviceDraft ? (
+                <div className="device-edit-form">
+                  <label>
+                    <span>Device Name</span>
+                    <input
+                      value={deviceDraft.name}
+                      onChange={(event) => {
+                        updateDeviceDraft("name", event.target.value);
+                      }}
+                    />
+                  </label>
+
+                  <label>
+                    <span>Manufacturer</span>
+                    <input
+                      value={deviceDraft.manufacturer}
+                      onChange={(event) => {
+                        updateDeviceDraft("manufacturer", event.target.value);
+                      }}
+                    />
+                  </label>
+
+                  <label>
+                    <span>Model</span>
+                    <input
+                      value={deviceDraft.model}
+                      onChange={(event) => {
+                        updateDeviceDraft("model", event.target.value);
+                      }}
+                    />
+                  </label>
+
+                  <label>
+                    <span>Firmware Version</span>
+                    <input
+                      value={deviceDraft.firmwareVersion}
+                      onChange={(event) => {
+                        updateDeviceDraft(
+                          "firmwareVersion",
+                          event.target.value
+                        );
+                      }}
+                    />
+                  </label>
+
+                  <label>
+                    <span>Owner</span>
+                    <input
+                      value={deviceDraft.owner}
+                      onChange={(event) => {
+                        updateDeviceDraft("owner", event.target.value);
+                      }}
+                    />
+                  </label>
+
+                  <label>
+                    <span>Flight Hours</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={deviceDraft.totalFlightHours}
+                      onChange={(event) => {
+                        updateDeviceDraft(
+                          "totalFlightHours",
+                          Number(event.target.value)
+                        );
+                      }}
+                    />
+                  </label>
+
+                  <label>
+                    <span>Missions Completed</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={deviceDraft.missionsCompleted}
+                      onChange={(event) => {
+                        updateDeviceDraft(
+                          "missionsCompleted",
+                          Number(event.target.value)
+                        );
+                      }}
+                    />
+                  </label>
+
+                  {deviceSaveError && (
+                    <p className="device-save-error">
+                      {deviceSaveError}
+                    </p>
+                  )}
+
+                  <div className="device-edit-actions">
+                    <button
+                      className="device-cancel-button"
+                      type="button"
+                      disabled={savingDevice}
+                      onClick={cancelEditingDevice}
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      className="device-save-button"
+                      type="button"
+                      disabled={savingDevice}
+                      onClick={() => {
+                        void saveDeviceProfile();
+                      }}
+                    >
+                      {savingDevice ? "Saving..." : "Save Profile"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="device-detail-grid">
+                  <div>
+                    <span>Device ID</span>
+                    <strong>{selectedDevice.id}</strong>
+                  </div>
+
+                  <div>
+                    <span>Manufacturer</span>
+                    <strong>{selectedDevice.manufacturer}</strong>
+                  </div>
+
+                  <div>
+                    <span>Model</span>
+                    <strong>{selectedDevice.model}</strong>
+                  </div>
+
+                  <div>
+                    <span>Firmware</span>
+                    <strong>{selectedDevice.firmwareVersion}</strong>
+                  </div>
+
+                  <div>
+                    <span>Owner</span>
+                    <strong>{selectedDevice.owner}</strong>
+                  </div>
+
+                  <div>
+                    <span>Telemetry Messages</span>
+                    <strong>{selectedDevice.telemetryCount}</strong>
+                  </div>
+                </div>
+              )}
+            </section>
+
+            <section className="device-profile-section">
+              <div className="device-profile-heading">
+                <span>LIVE OPERATIONS</span>
+              </div>
+
+              <div className="device-detail-grid">
+                <div>
+                  <span>Battery</span>
+                  <strong>
+                    {formatNumber(
+                      selectedDevice.latestTelemetry.battery
+                    )}
+                    %
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Voltage</span>
+                  <strong>
+                    {formatNumber(
+                      selectedDevice.latestTelemetry.voltage
+                    )}{" "}
+                    V
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Altitude</span>
+                  <strong>
+                    {formatNumber(
+                      selectedDevice.latestTelemetry.altitude
+                    )}{" "}
+                    m
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Speed</span>
+                  <strong>
+                    {formatNumber(
+                      selectedDevice.latestTelemetry.speed
+                    )}{" "}
+                    m/s
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Signal</span>
+                  <strong>
+                    {formatNumber(
+                      selectedDevice.latestTelemetry.signalStrength,
+                      0
+                    )}{" "}
+                    dBm
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Temperature</span>
+                  <strong>
+                    {formatNumber(
+                      selectedDevice.latestTelemetry.temperature
+                    )}
+                    °C
+                  </strong>
+                </div>
+              </div>
+
+              <div className="device-position">
+                <span>CURRENT POSITION</span>
+                <strong>
+                  {selectedDevice.latestTelemetry.latitude.toFixed(6)},{" "}
+                  {selectedDevice.latestTelemetry.longitude.toFixed(6)}
+                </strong>
+              </div>
+            </section>
+
+            <section className="device-profile-section">
+              <div className="device-profile-heading">
+                <span>DEVICE SENSORS</span>
+              </div>
+
+              <div className="sensor-list">
+                {selectedDevice.sensors.map((sensor) => (
+                  <span key={sensor}>{sensor}</span>
+                ))}
+              </div>
+            </section>
+
+            <section className="device-profile-section">
+              <div className="device-profile-heading">
+                <span>LIFECYCLE</span>
+              </div>
+
+              <div className="device-lifecycle">
+                <div>
+                  <span>First Seen</span>
+                  <strong>
+                    {new Date(
+                      selectedDevice.firstSeenAt
+                    ).toLocaleString()}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Last Seen</span>
+                  <strong>
+                    {formatLastSeen(selectedDevice.lastSeenAt)}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Flight Hours</span>
+                  <strong>
+                    {formatNumber(selectedDevice.totalFlightHours)}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Missions Completed</span>
+                  <strong>{selectedDevice.missionsCompleted}</strong>
+                </div>
+              </div>
+            </section>
+          </aside>
+        </div>
+      )}
+
     </main>
   );
 }
