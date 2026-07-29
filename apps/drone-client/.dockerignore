@@ -1,0 +1,41 @@
+# Git
+.git
+.gitignore
+
+# Build artifacts
+build/
+out/
+dist/
+bin/
+Debug/
+Release/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+Makefile
+
+# IDE
+.vscode/
+.vs/
+.idea/
+
+# Windows
+*.exe
+*.dll
+*.lib
+*.obj
+*.pdb
+*.ilk
+*.exp
+
+# Linux
+*.o
+*.a
+*.so
+
+# Logs
+*.log
+
+# Documentation
+README.md

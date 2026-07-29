@@ -145,10 +145,14 @@ class FalconDrone final : public virtual mqtt::callback {
 public:
     FalconDrone(
         std::string brokerUrl,
-        std::string droneId
+        std::string droneId,
+        std::string mqttUsername,
+        std::string mqttPassword
     )
         : brokerUrl_(std::move(brokerUrl)),
           droneId_(std::move(droneId)),
+          mqttUsername_(std::move(mqttUsername)),
+          mqttPassword_(std::move(mqttPassword)),
           clientId_("falcon-native-" + droneId_),
           telemetryTopic_(
               "falcon/drones/" +
@@ -187,6 +191,14 @@ public:
         options.set_automatic_reconnect(false);
         options.set_keep_alive_interval(20);
         options.set_connect_timeout(10);
+
+        if (!mqttUsername_.empty()) {
+            options.set_user_name(mqttUsername_);
+        }
+
+        if (!mqttPassword_.empty()) {
+            options.set_password(mqttPassword_);
+        }
 
         const json offlineStatus = {
             {"schemaVersion", 1},
@@ -1148,6 +1160,8 @@ private:
 
     std::string brokerUrl_;
     std::string droneId_;
+    std::string mqttUsername_;
+    std::string mqttPassword_;
     std::string clientId_;
 
     std::string telemetryTopic_;
@@ -1226,10 +1240,24 @@ int main(
                 "falcon-05"
             );
 
+    const std::string mqttUsername =
+        getEnvironmentValue(
+            "FALCON_MQTT_USERNAME",
+            ""
+        );
+
+    const std::string mqttPassword =
+        getEnvironmentValue(
+            "FALCON_MQTT_PASSWORD",
+            ""
+        );
+
     try {
         FalconDrone drone(
             brokerUrl,
-            droneId
+            droneId,
+            mqttUsername,
+            mqttPassword
         );
 
         drone.connect();
