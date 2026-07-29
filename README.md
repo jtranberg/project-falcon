@@ -9,14 +9,15 @@
   />
 </p>
 
-<h1 align="center">
-Project Falcon
-</h1>
+<h1 align="center">Project Falcon</h1>
 
+<p align="center">
+<strong>Mission Control for Connected Devices</strong>
+</p>
 
-<h2 align="center">
-Mission Control for Connected Devices
-</h2>
+<p align="center">
+Production-oriented IoT Fleet Management Platform
+</p>
 
 <p align="center">
 
@@ -46,6 +47,19 @@ Mission Control for Connected Devices
 </p>
 
 Event-Driven • MQTT • gRPC • MongoDB • Socket.IO • React
+
+---
+
+## Highlights
+
+- Real-time IoT fleet monitoring
+- MQTT event-driven architecture
+- Persistent Device Registry with MongoDB
+- gRPC alert microservice
+- Live WebSocket telemetry streaming
+- Interactive React Mission Control dashboard
+- Dockerized multi-service platform
+- Azure cloud deployment roadmap
 
 ---
 
