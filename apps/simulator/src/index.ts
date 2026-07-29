@@ -1,4 +1,8 @@
 import "dotenv/config";
+
+import { createServer } from "node:http";
+import { randomUUID } from "node:crypto";
+
 import mqtt from "mqtt";
 
 type DroneState = {
@@ -20,6 +24,7 @@ const mqttPassword = process.env.MQTT_PASSWORD;
 
 const droneCount = Number(process.env.SIMULATOR_DRONES ?? 4);
 const intervalMs = Number(process.env.SIMULATOR_INTERVAL_MS ?? 500);
+const port = Number(process.env.PORT ?? 10000);
 
 if (!Number.isFinite(droneCount) || droneCount < 1) {
   throw new Error("SIMULATOR_DRONES must be a positive number.");
@@ -36,11 +41,32 @@ if (mqttUrl.startsWith("mqtts://") && (!mqttUsername || !mqttPassword)) {
 }
 
 const client = mqtt.connect(mqttUrl, {
-  clientId: `falcon-drone-client-${crypto.randomUUID()}`,
+  clientId: `falcon-drone-client-${randomUUID()}`,
   username: mqttUsername,
   password: mqttPassword,
   reconnectPeriod: 1_000,
   clean: true,
+});
+
+const server = createServer((_request, response) => {
+  const body = JSON.stringify({
+    success: true,
+    service: "falcon-drone-client",
+    mqttConnected: client.connected,
+    drones: droneCount,
+    intervalMs,
+    timestamp: new Date().toISOString(),
+  });
+
+  response.writeHead(client.connected ? 200 : 503, {
+    "Content-Type": "application/json",
+  });
+
+  response.end(body);
+});
+
+server.listen(port, "0.0.0.0", () => {
+  console.log(`Drone Client health endpoint listening on port ${port}.`);
 });
 
 const drones: DroneState[] = Array.from({ length: droneCount }, (_, index) => ({
@@ -132,12 +158,15 @@ client.on("connect", () => {
   setInterval(() => {
     for (const drone of drones) {
       const telemetry = nextTelemetry(drone);
-      const topic = `falcon/drones/${drone.id}/telemetry`;
 
-      client.publish(topic, JSON.stringify(telemetry), {
-        qos: 0,
-        retain: false,
-      });
+      client.publish(
+        `falcon/drones/${drone.id}/telemetry`,
+        JSON.stringify(telemetry),
+        {
+          qos: 0,
+          retain: false,
+        }
+      );
     }
   }, intervalMs);
 });
