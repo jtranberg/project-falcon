@@ -1,0 +1,10 @@
+^C:\USERS\ME\DESKTOP\PROJECT-FALCON\APPS\DRONE-CLIENT\BUILD\CMAKEFILES\28BB430B4D9F95CC8CF57E0A867251FB\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/Me/Desktop/project-falcon/apps/drone-client -BC:/Users/Me/Desktop/project-falcon/apps/drone-client/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Users/Me/Desktop/project-falcon/apps/drone-client/build/FalconDroneClient.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

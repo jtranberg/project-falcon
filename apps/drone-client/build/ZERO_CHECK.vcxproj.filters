@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="16.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Me\Desktop\project-falcon\apps\drone-client\build\CMakeFiles\28bb430b4d9f95cc8cf57e0a867251fb\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{1CDB5955-8A4D-391A-955F-A5A344C0EC27}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

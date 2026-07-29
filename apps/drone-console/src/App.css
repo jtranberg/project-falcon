@@ -1,0 +1,532 @@
+:root {
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  color: #e8eef7;
+  background: #071018;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  min-height: 100%;
+  background:
+    radial-gradient(circle at top, rgba(54, 119, 255, 0.14), transparent 34%),
+    #071018;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    radial-gradient(circle at 18% 8%, rgba(0, 229, 255, 0.07), transparent 24%),
+    #071018;
+  background-size:
+    42px 42px,
+    42px 42px,
+    auto,
+    auto;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 0;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.drone-console {
+  width: min(1480px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 32px 0 48px;
+}
+
+.console-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+  padding: 24px 26px;
+  border: 1px solid rgba(123, 161, 206, 0.18);
+  border-radius: 18px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(14, 28, 42, 0.96),
+      rgba(8, 19, 29, 0.92)
+    );
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.eyebrow,
+.panel-label {
+  margin: 0 0 7px;
+  color: #6fb5ff;
+  font-size: 0.73rem;
+  font-weight: 800;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+}
+
+.console-header h1 {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  line-height: 0.95;
+  letter-spacing: 0.03em;
+}
+
+.subtitle {
+  margin: 12px 0 0;
+  color: #91a2b6;
+  font-size: 1rem;
+}
+
+.connection-badge,
+.power-indicator,
+.transmission-state,
+.target-altitude {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  white-space: nowrap;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.connection-badge {
+  min-width: 148px;
+  padding: 11px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 12px currentColor;
+}
+
+.status-positive {
+  color: #4ee6a8;
+  border-color: rgba(78, 230, 168, 0.26);
+  background: rgba(78, 230, 168, 0.08);
+}
+
+.status-warning {
+  color: #ffd166;
+  border-color: rgba(255, 209, 102, 0.26);
+  background: rgba(255, 209, 102, 0.08);
+}
+
+.status-negative {
+  color: #ff7b8f;
+  border-color: rgba(255, 123, 143, 0.25);
+  background: rgba(255, 123, 143, 0.08);
+}
+
+.console-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 22px;
+}
+
+.panel {
+  min-width: 0;
+  padding: 23px;
+  border: 1px solid rgba(123, 161, 206, 0.16);
+  border-radius: 18px;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(16, 30, 44, 0.94),
+      rgba(8, 19, 29, 0.94)
+    );
+  box-shadow:
+    0 16px 44px rgba(0, 0, 0, 0.23),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.panel-heading h2 {
+  margin: 0;
+  color: #f4f7fb;
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+}
+
+.panel-heading > span:not(.power-indicator):not(.transmission-state):not(.target-altitude) {
+  color: #7e91a8;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.power-indicator,
+.transmission-state,
+.target-altitude {
+  padding: 8px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #8899ad;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.power-indicator.active,
+.transmission-state.active {
+  color: #4ee6a8;
+  border-color: rgba(78, 230, 168, 0.25);
+  background: rgba(78, 230, 168, 0.08);
+  box-shadow: 0 0 18px rgba(78, 230, 168, 0.08);
+}
+
+.target-altitude {
+  color: #79b8ff;
+  border-color: rgba(121, 184, 255, 0.24);
+  background: rgba(121, 184, 255, 0.08);
+}
+
+.field-label {
+  display: block;
+  margin: 0 0 8px;
+  color: #94a5b8;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.text-input {
+  width: 100%;
+  padding: 13px 14px;
+  border: 1px solid rgba(122, 162, 208, 0.18);
+  border-radius: 10px;
+  outline: none;
+  color: #edf4fc;
+  background: #09141f;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    background 150ms ease;
+}
+
+.text-input:focus {
+  border-color: rgba(83, 157, 255, 0.8);
+  background: #0a1824;
+  box-shadow: 0 0 0 3px rgba(83, 157, 255, 0.12);
+}
+
+.text-input:disabled {
+  color: #718197;
+  cursor: not-allowed;
+}
+
+.identity-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0 0;
+}
+
+.identity-details > div {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.055);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.identity-details span,
+.metric-card span {
+  display: block;
+  margin-bottom: 6px;
+  color: #7f91a6;
+  font-size: 0.73rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.identity-details strong {
+  display: block;
+  overflow: hidden;
+  color: #d9e5f2;
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.button,
+.adjust-button {
+  min-height: 42px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 800;
+  transition:
+    transform 130ms ease,
+    opacity 130ms ease,
+    border-color 130ms ease,
+    background 130ms ease;
+}
+
+.button:hover:not(:disabled),
+.adjust-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.button:active:not(:disabled),
+.adjust-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.button:disabled,
+.adjust-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.button-primary {
+  color: #071018;
+  background: linear-gradient(135deg, #63c2ff, #7b8cff);
+  box-shadow: 0 8px 20px rgba(78, 137, 255, 0.17);
+}
+
+.button-secondary {
+  border: 1px solid rgba(123, 161, 206, 0.18);
+  color: #d6e2ef;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.button-danger {
+  border: 1px solid rgba(255, 105, 127, 0.26);
+  color: #ff8ea0;
+  background: rgba(255, 105, 127, 0.08);
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric-card {
+  min-width: 0;
+  min-height: 126px;
+  padding: 16px;
+  border: 1px solid rgba(117, 158, 204, 0.13);
+  border-radius: 13px;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(15, 34, 50, 0.82),
+      rgba(8, 21, 32, 0.88)
+    );
+}
+
+.metric-card strong {
+  display: block;
+  margin: 16px 0 4px;
+  color: #f5f9fd;
+  font-size: clamp(1.65rem, 3vw, 2.4rem);
+  line-height: 1;
+  letter-spacing: -0.05em;
+}
+
+.metric-card small {
+  color: #71849a;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.controls-panel {
+  grid-column: 1 / -1;
+}
+
+.altitude-control {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 26px;
+}
+
+.adjust-button {
+  min-width: 62px;
+  border: 1px solid rgba(123, 161, 206, 0.16);
+  color: #d9e7f4;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.altitude-slider {
+  width: 100%;
+  height: 5px;
+  accent-color: #69b7ff;
+  cursor: pointer;
+}
+
+.altitude-slider:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.control-buttons {
+  margin-top: 24px;
+}
+
+.activity-panel {
+  grid-column: 1 / -1;
+}
+
+.activity-list {
+  display: grid;
+  gap: 9px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.activity-entry {
+  display: grid;
+  grid-template-columns: 98px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  padding: 12px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.023);
+}
+
+.activity-entry span {
+  color: #6686a8;
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.activity-entry p {
+  margin: 0;
+  color: #c0cede;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.activity-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.activity-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.activity-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(116, 151, 189, 0.22);
+}
+
+@media (max-width: 900px) {
+  .drone-console {
+    width: min(100% - 24px, 1480px);
+    padding-top: 18px;
+  }
+
+  .console-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .controls-panel,
+  .activity-panel {
+    grid-column: auto;
+  }
+
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .console-header {
+    flex-direction: column;
+    padding: 20px;
+  }
+
+  .connection-badge {
+    align-self: stretch;
+  }
+
+  .panel {
+    padding: 18px;
+  }
+
+  .panel-heading {
+    flex-direction: column;
+  }
+
+  .identity-details,
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .altitude-control {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .altitude-control .altitude-slider {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .adjust-button {
+    width: 100%;
+  }
+
+  .button {
+    flex: 1 1 145px;
+  }
+
+  .activity-entry {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+}

@@ -131,6 +131,7 @@ const alertsByDrone = new Map<string, Alert[]>();
 const lastReceivedAt = new Map<string, number>();
 
 async function startServer(): Promise<void> {
+  
   try {
     await connectDatabase();
 
@@ -148,6 +149,7 @@ async function startServer(): Promise<void> {
     console.error("Unable to start Falcon gateway:", error);
     process.exit(1);
   }
+  
 }
 
 void startServer();

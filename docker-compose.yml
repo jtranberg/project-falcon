@@ -30,6 +30,7 @@ services:
       GATEWAY_PORT: "5050"
       GRPC_ALERT_ADDRESS: "alert-service:50051"
       MONGODB_URI: "${MONGODB_URI}"
+      DEVICE_PERSIST_INTERVAL_MS: "${DEVICE_PERSIST_INTERVAL_MS:-10000}"
     ports:
       - "5050:5050"
 
