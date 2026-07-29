@@ -25,26 +25,30 @@
 
 # Overview
 
-Project Falcon is a production-oriented IoT operations platform for monitoring, analyzing, and managing fleets of connected devices in real time.
+Project Falcon is a production-oriented IoT operations platform for monitoring, managing, and analyzing fleets of connected devices in real time.
 
-Built around an event-driven architecture, Falcon combines MQTT messaging, gRPC microservices, WebSocket streaming, and a React Mission Control dashboard to deliver low-latency telemetry visualization and operational awareness.
+Built around an event-driven architecture, Falcon combines MQTT messaging, gRPC microservices, WebSocket streaming, a centralized Device Registry, and a React Mission Control dashboard to deliver low-latency telemetry visualization, operational awareness, and live fleet management.
 
-While the current implementation simulates autonomous drones, the underlying architecture is designed to support virtually any connected device, including robotics, autonomous vehicles, industrial equipment, environmental sensors, and embedded systems.
+While the current implementation simulates autonomous drones, the underlying architecture is designed to support virtually any connected device, including robotics, autonomous vehicles, industrial equipment, environmental sensors, manufacturing equipment, and embedded systems.
 
 ---
 
 # Key Features
 
 - Real-time IoT telemetry processing
+- Automatic device discovery and registration
+- Fleet registry and device management
+- Interactive device profiles
+- Live profile editing
 - MQTT event-driven messaging
 - gRPC microservice architecture
-- Live Mission Control dashboard
-- Interactive fleet map with Leaflet
-- Flight trail visualization
 - WebSocket streaming without polling
-- Dockerized local deployment
+- Interactive Mission Control dashboard
+- Live fleet map with Leaflet
+- Flight trail visualization
+- Dockerized development environment
 - TypeScript throughout the platform
-- Azure IoT migration roadmap
+- Azure cloud migration roadmap
 
 ---
 
@@ -64,12 +68,13 @@ While the current implementation simulates autonomous drones, the underlying arc
         │                               │
         ▼                               ▼
   gRPC Alert Service             Device Registry
-        │
-        ▼
-   WebSocket Gateway
-        │
-        ▼
- React Mission Control Dashboard
+        │                               │
+        └───────────────┬───────────────┘
+                        ▼
+                Socket.IO Gateway
+                        │
+                        ▼
+         React Mission Control Dashboard
 ```
 
 ---
@@ -111,15 +116,15 @@ While the current implementation simulates autonomous drones, the underlying arc
 
 # Current Capabilities
 
-## Telemetry Processing
+## Real-Time Telemetry
 
-Each simulated aircraft continuously publishes:
+Each connected aircraft continuously publishes:
 
 - GPS Position
 - Heading
 - Speed
 - Altitude
-- Battery
+- Battery Level
 - Voltage
 - Signal Strength
 - Temperature
@@ -133,11 +138,28 @@ The operations dashboard provides:
 
 - Live fleet map
 - Aircraft selection
-- Flight trail history
-- Fleet health
-- Active alerts
+- Flight trail visualization
+- Fleet telemetry
 - Gateway latency
-- Connection status
+- Active alerts
+- Connection monitoring
+- Operational overview
+
+---
+
+## Fleet Registry
+
+The integrated Device Registry provides:
+
+- Automatic device discovery
+- Fleet inventory
+- Device registration
+- Device profiles
+- Firmware tracking
+- Ownership management
+- Health scoring
+- Online and offline detection
+- Live profile editing
 
 ---
 
@@ -162,6 +184,12 @@ Install dependencies
 
 ```bash
 npm install
+```
+
+Build all workspaces
+
+```bash
+npm run build
 ```
 
 Start the platform
@@ -203,20 +231,22 @@ http://localhost:5050/api/health
 - Fleet Telemetry
 - Operational Dashboard
 
-## Phase 3 🚧 Device Management
+## Phase 3 ✅ Device Management
 
 - Device Registry
 - Fleet Management
-- Aircraft Profiles
+- Device Profiles
 - Firmware Tracking
-- Online / Offline Detection
+- Online and Offline Detection
+- Live Profile Editing
 
-## Phase 4
+## Phase 4 🚧 Persistence
 
+- MongoDB Integration
 - Historical Telemetry
 - Mission Replay
 - Incident Timeline
-- MongoDB Persistence
+- Maintenance History
 - Fleet Analytics
 
 ## Phase 5
@@ -224,7 +254,8 @@ http://localhost:5050/api/health
 - Azure IoT Hub
 - Azure Container Apps
 - Azure Monitor
-- Event Hubs
+- Azure Event Hubs
+- Azure Device Twins
 - Production Deployment
 
 ## Phase 6
@@ -237,15 +268,18 @@ http://localhost:5050/api/health
 
 ---
 
-# Engineering Principles
+# Enterprise Engineering Principles
 
-Project Falcon is being developed using modern enterprise engineering practices, including:
+Project Falcon demonstrates modern enterprise software engineering practices, including:
 
 - Event-driven architecture
-- Low-latency telemetry
-- Microservice design
+- Publish and subscribe messaging
+- Microservice communication
+- Real-time WebSocket streaming
+- Device Registry pattern
+- Operational dashboard design
 - Containerized deployment
-- Real-time visualization
+- Strong TypeScript typing
 - Cloud-native architecture
 - Operational observability
 - Scalable system design
@@ -274,6 +308,14 @@ project-falcon/
 ├── package.json
 └── README.md
 ```
+
+---
+
+# Future Vision
+
+Project Falcon is being designed as a cloud-native IoT operations platform capable of supporting industrial fleets at scale.
+
+Future releases will introduce persistent fleet storage, historical telemetry, cloud-native messaging, enterprise monitoring, predictive analytics, and AI-assisted operational intelligence while maintaining the event-driven architecture established in the current platform.
 
 ---
 
