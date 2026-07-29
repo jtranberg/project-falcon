@@ -26,10 +26,22 @@ type RegisteredDevice = {
   firmwareVersion: string;
   owner: string;
   status: "ONLINE" | "OFFLINE";
-  healthState: string;
+  healthState: "HEALTHY" | "DEGRADED" | "CRITICAL" | "OFFLINE" | string;
   healthScore: number;
   telemetryCount: number;
   lastSeenAt: string;
+};
+
+type RegistrySnapshotPayload = {
+  devices: RegisteredDevice[];
+};
+
+type DeviceUpdatedPayload = {
+  device: RegisteredDevice;
+};
+
+type DeviceDeletedPayload = {
+  deviceId: string;
 };
 
 type Alert = {
@@ -41,24 +53,29 @@ type Alert = {
 type Telemetry = {
   droneId: string;
   timestamp: string;
+
   position: {
     latitude: number;
     longitude: number;
     altitudeM: number;
   };
+
   motion: {
     speedMps: number;
     headingDeg: number;
   };
+
   power: {
     batteryPercent: number;
     voltageV: number;
   };
+
   health: {
     temperatureC: number;
     signalDbm: number;
     gpsFix: boolean;
   };
+
   flightMode: string;
 };
 
@@ -85,6 +102,26 @@ function formatNumber(value: number, digits = 1): string {
   return Number.isFinite(value) ? value.toFixed(digits) : "—";
 }
 
+function formatLastSeen(timestamp: string): string {
+  const parsedTimestamp = new Date(timestamp);
+
+  if (Number.isNaN(parsedTimestamp.getTime())) {
+    return "Unknown";
+  }
+
+  const elapsedMilliseconds = Date.now() - parsedTimestamp.getTime();
+
+  if (elapsedMilliseconds < 10_000) {
+    return "Live";
+  }
+
+  if (elapsedMilliseconds < 60_000) {
+    return `${Math.floor(elapsedMilliseconds / 1_000)} sec ago`;
+  }
+
+  return parsedTimestamp.toLocaleTimeString();
+}
+
 function createDroneIcon(
   droneId: string,
   headingDeg: number,
@@ -104,6 +141,7 @@ function createDroneIcon(
         >
           ▲
         </div>
+
         <span>${droneId}</span>
       </div>
     `,
@@ -145,13 +183,12 @@ function FleetMapController({
 function App() {
   const [fleet, setFleet] = React.useState<Record<string, DroneEnvelope>>({});
   const [trails, setTrails] = React.useState<Record<string, DroneTrail>>({});
+  const [devices, setDevices] = React.useState<RegisteredDevice[]>([]);
   const [connected, setConnected] = React.useState(socket.connected);
   const [lastEventAt, setLastEventAt] = React.useState<string>("—");
   const [selectedDroneId, setSelectedDroneId] = React.useState<string | null>(
     null
   );
-
-  const [devices, setDevices] = React.useState<RegisteredDevice[]>([]);
 
   React.useEffect(() => {
     function handleConnect() {
@@ -183,43 +220,15 @@ function App() {
       setTrails(nextTrails);
 
       if (items.length > 0) {
-        setSelectedDroneId((current) => {
-          return current ?? items[0].telemetry.droneId;
-        });
+        setSelectedDroneId(
+          (current) => current ?? items[0].telemetry.droneId
+        );
       }
     }
-
-    async function loadRegistry() {
-      const response = await fetch(`${gatewayUrl}/api/devices`);
-
-      if (!response.ok) {
-        return;
-      }
-
-      const json = await response.json();
-
-      setDevices(json.devices);
-    }
-
-    void loadRegistry();
-    socket.on("registry:snapshot", (payload) => {
-      setDevices(payload.devices);
-    });
-
-    socket.on("device:updated", (payload) => {
-      setDevices((current) => {
-        const filtered = current.filter(
-          (device) => device.id !== payload.device.id
-        );
-
-        return [...filtered, payload.device].sort((a, b) =>
-          a.name.localeCompare(b.name)
-        );
-      });
-    });
 
     function handleTelemetry(item: DroneEnvelope) {
       const { droneId, position } = item.telemetry;
+
       const nextPoint: LatLngExpression = [
         position.latitude,
         position.longitude
@@ -232,13 +241,10 @@ function App() {
 
       setTrails((current) => {
         const currentTrail = current[droneId] ?? [];
-        const nextTrail = [...currentTrail, nextPoint].slice(
-          -MAX_TRAIL_POINTS
-        );
 
         return {
           ...current,
-          [droneId]: nextTrail
+          [droneId]: [...currentTrail, nextPoint].slice(-MAX_TRAIL_POINTS)
         };
       });
 
@@ -246,21 +252,73 @@ function App() {
       setLastEventAt(new Date().toLocaleTimeString());
     }
 
+    function handleRegistrySnapshot(payload: RegistrySnapshotPayload) {
+      setDevices(
+        [...payload.devices].sort((first, second) =>
+          first.name.localeCompare(second.name)
+        )
+      );
+    }
+
+    function handleDeviceUpdated(payload: DeviceUpdatedPayload) {
+      setDevices((current) => {
+        const remainingDevices = current.filter(
+          (device) => device.id !== payload.device.id
+        );
+
+        return [...remainingDevices, payload.device].sort((first, second) =>
+          first.name.localeCompare(second.name)
+        );
+      });
+    }
+
+    function handleDeviceDeleted(payload: DeviceDeletedPayload) {
+      setDevices((current) =>
+        current.filter((device) => device.id !== payload.deviceId)
+      );
+    }
+
+    async function loadRegistry() {
+      try {
+        const response = await fetch(`${gatewayUrl}/api/devices`);
+
+        if (!response.ok) {
+          throw new Error(
+            `Registry request failed with status ${response.status}.`
+          );
+        }
+
+        const payload = (await response.json()) as RegistrySnapshotPayload;
+
+        handleRegistrySnapshot(payload);
+      } catch (error) {
+        console.error("Unable to load Falcon device registry:", error);
+      }
+    }
+
+    void loadRegistry();
+
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
     socket.on("fleet:snapshot", handleSnapshot);
     socket.on("telemetry:update", handleTelemetry);
+    socket.on("registry:snapshot", handleRegistrySnapshot);
+    socket.on("device:updated", handleDeviceUpdated);
+    socket.on("device:deleted", handleDeviceDeleted);
 
     return () => {
       socket.off("connect", handleConnect);
       socket.off("disconnect", handleDisconnect);
       socket.off("fleet:snapshot", handleSnapshot);
       socket.off("telemetry:update", handleTelemetry);
+      socket.off("registry:snapshot", handleRegistrySnapshot);
+      socket.off("device:updated", handleDeviceUpdated);
+      socket.off("device:deleted", handleDeviceDeleted);
     };
   }, []);
 
-  const drones = Object.values(fleet).sort((a, b) =>
-    a.telemetry.droneId.localeCompare(b.telemetry.droneId)
+  const drones = Object.values(fleet).sort((first, second) =>
+    first.telemetry.droneId.localeCompare(second.telemetry.droneId)
   );
 
   const activeAlerts = drones.flatMap((drone) => drone.alerts);
@@ -269,9 +327,9 @@ function App() {
     drones.length === 0
       ? 0
       : drones.reduce(
-        (sum, drone) => sum + (drone.latencyMs ?? 0),
-        0
-      ) / drones.length;
+          (sum, drone) => sum + (drone.latencyMs ?? 0),
+          0
+        ) / drones.length;
 
   const selectedDrone =
     (selectedDroneId ? fleet[selectedDroneId] : undefined) ?? drones[0];
@@ -359,8 +417,7 @@ function App() {
               ];
 
               const trail = trails[telemetry.droneId] ?? [];
-              const isSelected =
-                selectedDroneId === telemetry.droneId;
+              const isSelected = selectedDroneId === telemetry.droneId;
 
               return (
                 <React.Fragment key={telemetry.droneId}>
@@ -391,30 +448,23 @@ function App() {
                     <Popup>
                       <div className="map-popup">
                         <strong>{telemetry.droneId}</strong>
+
                         <span>
                           Battery:{" "}
-                          {formatNumber(
-                            telemetry.power.batteryPercent
-                          )}
-                          %
+                          {formatNumber(telemetry.power.batteryPercent)}%
                         </span>
+
                         <span>
                           Altitude:{" "}
-                          {formatNumber(
-                            telemetry.position.altitudeM
-                          )}{" "}
-                          m
+                          {formatNumber(telemetry.position.altitudeM)} m
                         </span>
+
                         <span>
-                          Speed:{" "}
-                          {formatNumber(
-                            telemetry.motion.speedMps
-                          )}{" "}
-                          m/s
+                          Speed: {formatNumber(telemetry.motion.speedMps)} m/s
                         </span>
+
                         <span>
-                          Latency:{" "}
-                          {formatNumber(latencyMs ?? 0, 0)} ms
+                          Latency: {formatNumber(latencyMs ?? 0, 0)} ms
                         </span>
                       </div>
                     </Popup>
@@ -430,19 +480,14 @@ function App() {
             <>
               <div className="selected-drone-heading">
                 <div>
-                  <span className="drone-label">
-                    SELECTED AIRCRAFT
-                  </span>
+                  <span className="drone-label">SELECTED AIRCRAFT</span>
                   <h3>{selectedDrone.telemetry.droneId}</h3>
                 </div>
 
                 <span
                   className={`mode mode-${selectedDrone.telemetry.flightMode.toLowerCase()}`}
                 >
-                  {selectedDrone.telemetry.flightMode.replaceAll(
-                    "_",
-                    " "
-                  )}
+                  {selectedDrone.telemetry.flightMode.replaceAll("_", " ")}
                 </span>
               </div>
 
@@ -460,10 +505,7 @@ function App() {
                 <div>
                   <span>Voltage</span>
                   <strong>
-                    {formatNumber(
-                      selectedDrone.telemetry.power.voltageV
-                    )}{" "}
-                    V
+                    {formatNumber(selectedDrone.telemetry.power.voltageV)} V
                   </strong>
                 </div>
 
@@ -480,10 +522,7 @@ function App() {
                 <div>
                   <span>Speed</span>
                   <strong>
-                    {formatNumber(
-                      selectedDrone.telemetry.motion.speedMps
-                    )}{" "}
-                    m/s
+                    {formatNumber(selectedDrone.telemetry.motion.speedMps)} m/s
                   </strong>
                 </div>
 
@@ -531,22 +570,16 @@ function App() {
 
               <div className="selected-coordinates">
                 <span>Current Position</span>
+
                 <strong>
-                  {selectedDrone.telemetry.position.latitude.toFixed(
-                    6
-                  )}
-                  ,{" "}
-                  {selectedDrone.telemetry.position.longitude.toFixed(
-                    6
-                  )}
+                  {selectedDrone.telemetry.position.latitude.toFixed(6)},{" "}
+                  {selectedDrone.telemetry.position.longitude.toFixed(6)}
                 </strong>
               </div>
 
               <div className="alerts">
                 {selectedDrone.alerts.length === 0 ? (
-                  <span className="nominal">
-                    All systems nominal
-                  </span>
+                  <span className="nominal">All systems nominal</span>
                 ) : (
                   selectedDrone.alerts.map((alert) => (
                     <span
@@ -567,46 +600,93 @@ function App() {
         </aside>
       </section>
 
+      <section className="section-heading registry-heading">
+        <div>
+          <p className="eyebrow">DEVICE MANAGEMENT</p>
+          <h2>Fleet Registry</h2>
+        </div>
+
+        <span className="registry-count">
+          {devices.length} Registered
+        </span>
+      </section>
+
+      <section className="registry-grid">
+        {devices.length === 0 ? (
+          <article className="empty-state">
+            Waiting for devices to register through MQTT telemetry.
+          </article>
+        ) : (
+          devices.map((device) => (
+            <article
+              className={`registry-card registry-card-${device.status.toLowerCase()}`}
+              key={device.id}
+              onClick={() => {
+                setSelectedDroneId(device.id);
+              }}
+            >
+              <header className="registry-header">
+                <div>
+                  <span className="drone-label">REGISTERED DEVICE</span>
+                  <h3>{device.name}</h3>
+                  <small>{device.serialNumber}</small>
+                </div>
+
+                <span
+                  className={`registry-status ${
+                    device.status === "ONLINE"
+                      ? "registry-online"
+                      : "registry-offline"
+                  }`}
+                >
+                  <i />
+                  {device.status}
+                </span>
+              </header>
+
+              <div className="registry-stats">
+                <div>
+                  <span>Health</span>
+                  <strong>{device.healthScore}%</strong>
+                </div>
+
+                <div>
+                  <span>Firmware</span>
+                  <strong>{device.firmwareVersion}</strong>
+                </div>
+
+                <div>
+                  <span>Model</span>
+                  <strong>{device.model}</strong>
+                </div>
+
+                <div>
+                  <span>Telemetry</span>
+                  <strong>{device.telemetryCount}</strong>
+                </div>
+              </div>
+
+              <footer className="registry-footer">
+                <div>
+                  <span>Owner</span>
+                  <strong>{device.owner}</strong>
+                </div>
+
+                <div>
+                  <span>Last Seen</span>
+                  <strong>{formatLastSeen(device.lastSeenAt)}</strong>
+                </div>
+              </footer>
+            </article>
+          ))
+        )}
+      </section>
+
       <section className="section-heading telemetry-heading">
         <div>
           <p className="eyebrow">FLEET STATUS</p>
           <h2>Live Telemetry</h2>
         </div>
-      </section>
-
-      <section className="section-heading">
-        <div>
-          <p className="eyebrow">DEVICE MANAGEMENT</p>
-          <h2>Fleet Registry</h2>
-        </div>
-      </section>
-
-      <section className="registry-table">
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Status</th>
-              <th>Health</th>
-              <th>Firmware</th>
-              <th>Model</th>
-              <th>Telemetry</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {devices.map((device) => (
-              <tr key={device.id}>
-                <td>{device.name}</td>
-                <td>{device.status}</td>
-                <td>{device.healthScore}%</td>
-                <td>{device.firmwareVersion}</td>
-                <td>{device.model}</td>
-                <td>{device.telemetryCount}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </section>
 
       <section className="fleet-grid">
@@ -617,10 +697,11 @@ function App() {
         ) : (
           drones.map(({ telemetry, alerts, latencyMs }) => (
             <article
-              className={`drone-card ${selectedDroneId === telemetry.droneId
+              className={`drone-card ${
+                selectedDroneId === telemetry.droneId
                   ? "drone-card-selected"
                   : ""
-                }`}
+              }`}
               key={telemetry.droneId}
               onClick={() => {
                 setSelectedDroneId(telemetry.droneId);
@@ -664,21 +745,14 @@ function App() {
                 <div>
                   <span>Signal</span>
                   <strong>
-                    {formatNumber(
-                      telemetry.health.signalDbm,
-                      0
-                    )}{" "}
-                    dBm
+                    {formatNumber(telemetry.health.signalDbm, 0)} dBm
                   </strong>
                 </div>
 
                 <div>
                   <span>Temperature</span>
                   <strong>
-                    {formatNumber(
-                      telemetry.health.temperatureC
-                    )}
-                    °C
+                    {formatNumber(telemetry.health.temperatureC)}°C
                   </strong>
                 </div>
 
@@ -697,9 +771,7 @@ function App() {
 
               <div className="alerts">
                 {alerts.length === 0 ? (
-                  <span className="nominal">
-                    All systems nominal
-                  </span>
+                  <span className="nominal">All systems nominal</span>
                 ) : (
                   alerts.map((alert) => (
                     <span
