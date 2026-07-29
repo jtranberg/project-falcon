@@ -13,7 +13,7 @@ services:
       context: .
       dockerfile: apps/alert-service/Dockerfile
     environment:
-      GRPC_ALERT_ADDRESS: 0.0.0.0:50051
+      GRPC_ALERT_ADDRESS: "0.0.0.0:50051"
     ports:
       - "50051:50051"
 
@@ -25,10 +25,11 @@ services:
       - mosquitto
       - alert-service
     environment:
-      MQTT_URL: mqtt://mosquitto:1883
-      MQTT_TOPIC: falcon/drones/+/telemetry
-      GATEWAY_PORT: 5050
-      GRPC_ALERT_ADDRESS: alert-service:50051
+      MQTT_URL: "mqtt://mosquitto:1883"
+      MQTT_TOPIC: "falcon/drones/+/telemetry"
+      GATEWAY_PORT: "5050"
+      GRPC_ALERT_ADDRESS: "alert-service:50051"
+      MONGODB_URI: "${MONGODB_URI}"
     ports:
       - "5050:5050"
 
@@ -39,9 +40,9 @@ services:
     depends_on:
       - mosquitto
     environment:
-      MQTT_URL: mqtt://mosquitto:1883
-      SIMULATOR_DRONES: 4
-      SIMULATOR_INTERVAL_MS: 500
+      MQTT_URL: "mqtt://mosquitto:1883"
+      SIMULATOR_DRONES: "4"
+      SIMULATOR_INTERVAL_MS: "500"
 
   dashboard:
     build:

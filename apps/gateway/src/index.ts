@@ -18,6 +18,11 @@ import {
   type RegisteredDevice,
 } from "./services/deviceRegistry.js";
 
+import {
+  connectDatabase,
+  disconnectDatabase,
+} from "./database/connectDatabase.js";
+
 const telemetrySchema = z.object({
   schemaVersion: z.number(),
   droneId: z.string().min(1),
@@ -75,7 +80,7 @@ const currentDirectory = path.dirname(currentFile);
 
 const protoPath = path.resolve(
   currentDirectory,
-  "../../../packages/proto/alerts.proto"
+  "../../../packages/proto/alerts.proto",
 );
 
 const packageDefinition = protoLoader.loadSync(protoPath, {
@@ -88,19 +93,16 @@ const packageDefinition = protoLoader.loadSync(protoPath, {
 
 const descriptor = grpc.loadPackageDefinition(packageDefinition) as any;
 
-const grpcAddress =
-  process.env.GRPC_ALERT_ADDRESS ?? "localhost:50051";
+const grpcAddress = process.env.GRPC_ALERT_ADDRESS ?? "localhost:50051";
 
 const alertClient = new descriptor.falcon.alerts.AlertEvaluator(
   grpcAddress,
-  grpc.credentials.createInsecure()
+  grpc.credentials.createInsecure(),
 );
 
-const mqttUrl =
-  process.env.MQTT_URL ?? "mqtt://localhost:1883";
+const mqttUrl = process.env.MQTT_URL ?? "mqtt://localhost:1883";
 
-const mqttTopic =
-  process.env.MQTT_TOPIC ?? "falcon/drones/+/telemetry";
+const mqttTopic = process.env.MQTT_TOPIC ?? "falcon/drones/+/telemetry";
 
 const port = Number(process.env.GATEWAY_PORT ?? 5050);
 
@@ -110,7 +112,7 @@ app.use(
   cors({
     origin: true,
     credentials: true,
-  })
+  }),
 );
 
 app.use(express.json());
@@ -127,6 +129,51 @@ const io = new Server(server, {
 const latestByDrone = new Map<string, Telemetry>();
 const alertsByDrone = new Map<string, Alert[]>();
 const lastReceivedAt = new Map<string, number>();
+
+async function startServer(): Promise<void> {
+  try {
+    await connectDatabase();
+
+    server.listen(port, () => {
+      console.log(`Falcon gateway listening on port ${port}.`);
+    });
+  } catch (error) {
+    console.error("Unable to start Falcon gateway:", error);
+    process.exit(1);
+  }
+}
+
+void startServer();
+
+async function shutdown(signal: string): Promise<void> {
+  console.log(`${signal} received. Shutting down Falcon gateway.`);
+
+  clearInterval(registryStatusInterval);
+
+  mqttClient.end(true);
+  alertClient.close();
+
+  io.close(() => {
+    server.close(async (error) => {
+      if (error) {
+        console.error("Gateway shutdown failed:", error);
+        process.exit(1);
+      }
+
+      await disconnectDatabase();
+
+      process.exit(0);
+    });
+  });
+}
+
+process.on("SIGINT", () => {
+  void shutdown("SIGINT");
+});
+
+process.on("SIGTERM", () => {
+  void shutdown("SIGTERM");
+});
 
 function evaluateAlerts(telemetry: Telemetry): Promise<Alert[]> {
   return new Promise((resolve) => {
@@ -146,14 +193,11 @@ function evaluateAlerts(telemetry: Telemetry): Promise<Alert[]> {
       {
         deadline: Date.now() + 750,
       },
-      (
-        error: grpc.ServiceError | null,
-        response: { alerts?: Alert[] }
-      ) => {
+      (error: grpc.ServiceError | null, response: { alerts?: Alert[] }) => {
         if (error) {
           console.error(
             `Alert evaluation failed for ${telemetry.droneId}:`,
-            error.message
+            error.message,
           );
 
           resolve([]);
@@ -161,7 +205,7 @@ function evaluateAlerts(telemetry: Telemetry): Promise<Alert[]> {
         }
 
         resolve(response.alerts ?? []);
-      }
+      },
     );
   });
 }
@@ -171,7 +215,7 @@ function fleetSnapshot() {
     telemetry,
     alerts: alertsByDrone.get(telemetry.droneId) ?? [],
     gatewayReceivedAt: new Date(
-      lastReceivedAt.get(telemetry.droneId) ?? Date.now()
+      lastReceivedAt.get(telemetry.droneId) ?? Date.now(),
     ).toISOString(),
   }));
 }
@@ -229,9 +273,7 @@ app.get("/api/devices/summary", (_request, response) => {
 });
 
 app.get("/api/devices/:deviceId", (request, response) => {
-  const device = deviceRegistry.getDeviceById(
-    request.params.deviceId
-  );
+  const device = deviceRegistry.getDeviceById(request.params.deviceId);
 
   if (!device) {
     response.status(404).json({
@@ -263,7 +305,7 @@ app.patch("/api/devices/:deviceId", (request, response) => {
 
   const updatedDevice = deviceRegistry.updateDevice(
     request.params.deviceId,
-    parseResult.data
+    parseResult.data,
   );
 
   if (!updatedDevice) {
@@ -284,9 +326,7 @@ app.patch("/api/devices/:deviceId", (request, response) => {
 });
 
 app.delete("/api/devices/:deviceId", (request, response) => {
-  const deleted = deviceRegistry.deleteDevice(
-    request.params.deviceId
-  );
+  const deleted = deviceRegistry.deleteDevice(request.params.deviceId);
 
   if (!deleted) {
     response.status(404).json({
@@ -328,9 +368,7 @@ const mqttClient = mqtt.connect(mqttUrl, {
 });
 
 mqttClient.on("connect", () => {
-  console.log(
-    `Gateway connected to MQTT broker at ${mqttUrl}.`
-  );
+  console.log(`Gateway connected to MQTT broker at ${mqttUrl}.`);
 
   mqttClient.subscribe(
     mqttTopic,
@@ -339,16 +377,13 @@ mqttClient.on("connect", () => {
     },
     (error) => {
       if (error) {
-        console.error(
-          "MQTT subscription failed:",
-          error.message
-        );
+        console.error("MQTT subscription failed:", error.message);
 
         return;
       }
 
       console.log(`Subscribed to ${mqttTopic}.`);
-    }
+    },
   );
 });
 
@@ -356,79 +391,53 @@ mqttClient.on("message", async (_topic, payload) => {
   const receivedAt = Date.now();
 
   try {
-    const telemetry = telemetrySchema.parse(
-      JSON.parse(payload.toString())
-    );
+    const telemetry = telemetrySchema.parse(JSON.parse(payload.toString()));
 
     const alerts = await evaluateAlerts(telemetry);
 
-    latestByDrone.set(
-      telemetry.droneId,
-      telemetry
-    );
+    latestByDrone.set(telemetry.droneId, telemetry);
 
-    alertsByDrone.set(
-      telemetry.droneId,
-      alerts
-    );
+    alertsByDrone.set(telemetry.droneId, alerts);
 
-    lastReceivedAt.set(
-      telemetry.droneId,
-      receivedAt
-    );
+    lastReceivedAt.set(telemetry.droneId, receivedAt);
 
-    const registeredDevice =
-      deviceRegistry.registerTelemetry({
-        droneId: telemetry.droneId,
-        latitude: telemetry.position.latitude,
-        longitude: telemetry.position.longitude,
-        altitude: telemetry.position.altitudeM,
-        speed: telemetry.motion.speedMps,
-        heading: telemetry.motion.headingDeg,
-        battery: telemetry.power.batteryPercent,
-        voltage: telemetry.power.voltageV,
-        signalStrength: telemetry.health.signalDbm,
-        temperature: telemetry.health.temperatureC,
-        flightMode: telemetry.flightMode,
-        timestamp: telemetry.timestamp,
-      });
+    const registeredDevice = deviceRegistry.registerTelemetry({
+      droneId: telemetry.droneId,
+      latitude: telemetry.position.latitude,
+      longitude: telemetry.position.longitude,
+      altitude: telemetry.position.altitudeM,
+      speed: telemetry.motion.speedMps,
+      heading: telemetry.motion.headingDeg,
+      battery: telemetry.power.batteryPercent,
+      voltage: telemetry.power.voltageV,
+      signalStrength: telemetry.health.signalDbm,
+      temperature: telemetry.health.temperatureC,
+      flightMode: telemetry.flightMode,
+      timestamp: telemetry.timestamp,
+    });
 
     io.emit("telemetry:update", {
       telemetry,
       alerts,
       device: registeredDevice,
-      gatewayReceivedAt: new Date(
-        receivedAt
-      ).toISOString(),
-      latencyMs: Math.max(
-        0,
-        receivedAt - Date.parse(telemetry.timestamp)
-      ),
+      gatewayReceivedAt: new Date(receivedAt).toISOString(),
+      latencyMs: Math.max(0, receivedAt - Date.parse(telemetry.timestamp)),
     });
 
     broadcastRegistryUpdate(registeredDevice);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      console.error(
-        "Rejected malformed telemetry:",
-        error.flatten()
-      );
+      console.error("Rejected malformed telemetry:", error.flatten());
 
       return;
     }
 
-    console.error(
-      "Failed to process telemetry:",
-      error
-    );
+    console.error("Failed to process telemetry:", error);
   }
 });
 
 mqttClient.on("error", (error) => {
-  console.error(
-    "MQTT gateway error:",
-    error.message
-  );
+  console.error("MQTT gateway error:", error.message);
 });
 
 /**
@@ -438,21 +447,17 @@ mqttClient.on("error", (error) => {
  * the updated snapshot to connected dashboards.
  */
 const registryStatusInterval = setInterval(() => {
-  const before = deviceRegistry
-    .getAllDevices()
-    .map((device) => ({
-      id: device.id,
-      status: device.status,
-    }));
+  const before = deviceRegistry.getAllDevices().map((device) => ({
+    id: device.id,
+    status: device.status,
+  }));
 
   deviceRegistry.refreshConnectionStatuses();
 
   const devices = deviceRegistry.getAllDevices();
 
   const statusChanged = devices.some((device) => {
-    const previous = before.find(
-      (entry) => entry.id === device.id
-    );
+    const previous = before.find((entry) => entry.id === device.id);
 
     return previous?.status !== device.status;
   });
@@ -464,42 +469,3 @@ const registryStatusInterval = setInterval(() => {
     });
   }
 }, 5_000);
-
-server.listen(port, () => {
-  console.log(
-    `Falcon gateway listening on http://localhost:${port}.`
-  );
-});
-
-function shutdown(signal: string): void {
-  console.log(
-    `${signal} received. Shutting down Falcon gateway.`
-  );
-
-  clearInterval(registryStatusInterval);
-  mqttClient.end(true);
-  alertClient.close();
-
-  io.close(() => {
-    server.close((error) => {
-      if (error) {
-        console.error(
-          "Gateway shutdown failed:",
-          error
-        );
-
-        process.exit(1);
-      }
-
-      process.exit(0);
-    });
-  });
-}
-
-process.on("SIGINT", () => {
-  shutdown("SIGINT");
-});
-
-process.on("SIGTERM", () => {
-  shutdown("SIGTERM");
-});
