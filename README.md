@@ -1,6 +1,5 @@
 # Project Falcon
 
-# Project Falcon
 
 <p align="center">
   <img
