@@ -134,6 +134,13 @@ async function startServer(): Promise<void> {
   try {
     await connectDatabase();
 
+    const hydratedDeviceCount =
+      await deviceRegistry.hydrateFromDatabase();
+
+    console.log(
+      `Loaded ${hydratedDeviceCount} device(s) from MongoDB.`
+    );
+
     server.listen(port, () => {
       console.log(`Falcon gateway listening on port ${port}.`);
     });

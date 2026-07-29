@@ -55,6 +55,16 @@ export interface RegisterTelemetryInput {
   timestamp: string;
 }
 
+import type { DeviceRecord } from "../models/Device.js";
+
+import {
+  deleteDeviceById,
+  findAllDevices,
+  saveDevice,
+  updateDeviceProfile,
+  updatePersistedDeviceStatus,
+} from "../repositories/deviceRepository.js";
+
 const DEFAULT_SENSORS = [
   "GPS",
   "IMU",
@@ -136,6 +146,57 @@ function determineHealthState(
 export class DeviceRegistry {
   private readonly devices = new Map<string, RegisteredDevice>();
 
+  async hydrateFromDatabase(): Promise<number> {
+  const persistedDevices = await findAllDevices();
+
+  this.devices.clear();
+
+  for (const persistedDevice of persistedDevices) {
+    const device = this.fromDatabaseRecord(persistedDevice);
+
+    this.devices.set(device.id, device);
+  }
+
+  this.refreshConnectionStatuses();
+
+  return this.devices.size;
+}
+
+private fromDatabaseRecord(record: DeviceRecord): RegisteredDevice {
+  return {
+    id: record.deviceId,
+    name: record.name,
+    serialNumber: record.serialNumber,
+    manufacturer: record.manufacturer,
+    model: record.model,
+    firmwareVersion: record.firmwareVersion,
+    owner: record.owner,
+    status: record.status,
+    healthState: record.healthState,
+    healthScore: record.healthScore,
+    lastSeenAt: record.lastSeenAt,
+    firstSeenAt: record.firstSeenAt,
+    telemetryCount: record.telemetryCount,
+    totalFlightHours: record.totalFlightHours,
+    missionsCompleted: record.missionsCompleted,
+    sensors: [...record.sensors],
+
+    latestTelemetry: {
+      latitude: record.latestTelemetry.latitude,
+      longitude: record.latestTelemetry.longitude,
+      altitude: record.latestTelemetry.altitude,
+      speed: record.latestTelemetry.speed,
+      heading: record.latestTelemetry.heading,
+      battery: record.latestTelemetry.battery,
+      voltage: record.latestTelemetry.voltage,
+      signalStrength: record.latestTelemetry.signalStrength,
+      temperature: record.latestTelemetry.temperature,
+      flightMode: record.latestTelemetry.flightMode,
+      timestamp: record.latestTelemetry.timestamp,
+    },
+  };
+}
+
   registerTelemetry(input: RegisterTelemetryInput): RegisteredDevice {
     const now = input.timestamp || new Date().toISOString();
     const existingDevice = this.devices.get(input.droneId);
@@ -180,8 +241,17 @@ export class DeviceRegistry {
 
     this.devices.set(device.id, device);
 
+    void saveDevice(device).catch((error: unknown) => {
+  console.error(
+    `Unable to persist telemetry for device ${device.id}:`,
+    error
+  );
+});
+
     return device;
   }
+
+
 
   getAllDevices(): RegisteredDevice[] {
     this.refreshConnectionStatuses();
@@ -231,12 +301,32 @@ export class DeviceRegistry {
 
     this.devices.set(deviceId, updatedDevice);
 
+    void updateDeviceProfile(deviceId, updates).catch((error: unknown) => {
+  console.error(
+    `Unable to persist profile updates for device ${deviceId}:`,
+    error
+  );
+});
+
     return updatedDevice;
   }
 
   deleteDevice(deviceId: string): boolean {
-    return this.devices.delete(deviceId);
+  const deletedFromRegistry = this.devices.delete(deviceId);
+
+  if (!deletedFromRegistry) {
+    return false;
   }
+
+  void deleteDeviceById(deviceId).catch((error: unknown) => {
+    console.error(
+      `Unable to delete persisted device ${deviceId}:`,
+      error
+    );
+  });
+
+  return true;
+}
 
   getSummary() {
     this.refreshConnectionStatuses();
@@ -265,12 +355,26 @@ export class DeviceRegistry {
         continue;
       }
 
-      this.devices.set(deviceId, {
-        ...device,
-        status: "OFFLINE",
-        healthState: "OFFLINE",
-        healthScore: 0,
-      });
+      const offlineDevice: RegisteredDevice = {
+  ...device,
+  status: "OFFLINE",
+  healthState: "OFFLINE",
+  healthScore: 0,
+};
+
+this.devices.set(deviceId, offlineDevice);
+
+void updatePersistedDeviceStatus(
+  deviceId,
+  "OFFLINE",
+  "OFFLINE",
+  0
+).catch((error: unknown) => {
+  console.error(
+    `Unable to persist offline status for device ${deviceId}:`,
+    error
+  );
+});
     }
   }
 }
