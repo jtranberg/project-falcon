@@ -75,6 +75,19 @@ const DEFAULT_SENSORS = [
 
 const OFFLINE_AFTER_MS = 30_000;
 
+const DEVICE_PERSIST_INTERVAL_MS = Number(
+  process.env.DEVICE_PERSIST_INTERVAL_MS ?? 10_000
+);
+
+if (
+  !Number.isFinite(DEVICE_PERSIST_INTERVAL_MS) ||
+  DEVICE_PERSIST_INTERVAL_MS < 1_000
+) {
+  throw new Error(
+    "DEVICE_PERSIST_INTERVAL_MS must be a number of at least 1000."
+  );
+}
+
 function createSerialNumber(droneId: string): string {
   const numericId = droneId.match(/\d+/)?.[0] ?? droneId;
 
@@ -103,11 +116,11 @@ function calculateHealthScore(
     score -= 20;
   }
 
-if (telemetry.signalStrength <= -90) {
-  score -= 30;
-} else if (telemetry.signalStrength <= -75) {
-  score -= 15;
-}
+  if (telemetry.signalStrength <= -90) {
+    score -= 30;
+  } else if (telemetry.signalStrength <= -75) {
+    score -= 15;
+  }
 
   if (telemetry.temperature >= 85) {
     score -= 30;
@@ -146,56 +159,69 @@ function determineHealthState(
 export class DeviceRegistry {
   private readonly devices = new Map<string, RegisteredDevice>();
 
+  /**
+   * Tracks the most recent successful or scheduled persistence time
+   * for each device.
+   */
+  private readonly lastPersistedAt = new Map<string, number>();
+
+  /**
+   * Prevents overlapping MongoDB writes for the same device.
+   */
+  private readonly persistenceInProgress = new Set<string>();
+
   async hydrateFromDatabase(): Promise<number> {
-  const persistedDevices = await findAllDevices();
+    const persistedDevices = await findAllDevices();
 
-  this.devices.clear();
+    this.devices.clear();
+    this.lastPersistedAt.clear();
+    this.persistenceInProgress.clear();
 
-  for (const persistedDevice of persistedDevices) {
-    const device = this.fromDatabaseRecord(persistedDevice);
+    for (const persistedDevice of persistedDevices) {
+      const device = this.fromDatabaseRecord(persistedDevice);
 
-    this.devices.set(device.id, device);
+      this.devices.set(device.id, device);
+    }
+
+    this.refreshConnectionStatuses();
+
+    return this.devices.size;
   }
 
-  this.refreshConnectionStatuses();
+  private fromDatabaseRecord(record: DeviceRecord): RegisteredDevice {
+    return {
+      id: record.deviceId,
+      name: record.name,
+      serialNumber: record.serialNumber,
+      manufacturer: record.manufacturer,
+      model: record.model,
+      firmwareVersion: record.firmwareVersion,
+      owner: record.owner,
+      status: record.status,
+      healthState: record.healthState,
+      healthScore: record.healthScore,
+      lastSeenAt: record.lastSeenAt,
+      firstSeenAt: record.firstSeenAt,
+      telemetryCount: record.telemetryCount,
+      totalFlightHours: record.totalFlightHours,
+      missionsCompleted: record.missionsCompleted,
+      sensors: [...record.sensors],
 
-  return this.devices.size;
-}
-
-private fromDatabaseRecord(record: DeviceRecord): RegisteredDevice {
-  return {
-    id: record.deviceId,
-    name: record.name,
-    serialNumber: record.serialNumber,
-    manufacturer: record.manufacturer,
-    model: record.model,
-    firmwareVersion: record.firmwareVersion,
-    owner: record.owner,
-    status: record.status,
-    healthState: record.healthState,
-    healthScore: record.healthScore,
-    lastSeenAt: record.lastSeenAt,
-    firstSeenAt: record.firstSeenAt,
-    telemetryCount: record.telemetryCount,
-    totalFlightHours: record.totalFlightHours,
-    missionsCompleted: record.missionsCompleted,
-    sensors: [...record.sensors],
-
-    latestTelemetry: {
-      latitude: record.latestTelemetry.latitude,
-      longitude: record.latestTelemetry.longitude,
-      altitude: record.latestTelemetry.altitude,
-      speed: record.latestTelemetry.speed,
-      heading: record.latestTelemetry.heading,
-      battery: record.latestTelemetry.battery,
-      voltage: record.latestTelemetry.voltage,
-      signalStrength: record.latestTelemetry.signalStrength,
-      temperature: record.latestTelemetry.temperature,
-      flightMode: record.latestTelemetry.flightMode,
-      timestamp: record.latestTelemetry.timestamp,
-    },
-  };
-}
+      latestTelemetry: {
+        latitude: record.latestTelemetry.latitude,
+        longitude: record.latestTelemetry.longitude,
+        altitude: record.latestTelemetry.altitude,
+        speed: record.latestTelemetry.speed,
+        heading: record.latestTelemetry.heading,
+        battery: record.latestTelemetry.battery,
+        voltage: record.latestTelemetry.voltage,
+        signalStrength: record.latestTelemetry.signalStrength,
+        temperature: record.latestTelemetry.temperature,
+        flightMode: record.latestTelemetry.flightMode,
+        timestamp: record.latestTelemetry.timestamp,
+      },
+    };
+  }
 
   registerTelemetry(input: RegisterTelemetryInput): RegisteredDevice {
     const now = input.timestamp || new Date().toISOString();
@@ -235,23 +261,58 @@ private fromDatabaseRecord(record: DeviceRecord): RegisteredDevice {
       telemetryCount: (existingDevice?.telemetryCount ?? 0) + 1,
       totalFlightHours: existingDevice?.totalFlightHours ?? 0,
       missionsCompleted: existingDevice?.missionsCompleted ?? 0,
-      sensors: existingDevice?.sensors ?? DEFAULT_SENSORS,
+      sensors: existingDevice?.sensors ?? [...DEFAULT_SENSORS],
       latestTelemetry,
     };
 
     this.devices.set(device.id, device);
 
-    void saveDevice(device).catch((error: unknown) => {
-  console.error(
-    `Unable to persist telemetry for device ${device.id}:`,
-    error
-  );
-});
+    this.persistDeviceIfDue(device);
 
     return device;
   }
 
+  private persistDeviceIfDue(device: RegisteredDevice): void {
+    const currentTime = Date.now();
+    const previousPersistedAt =
+      this.lastPersistedAt.get(device.id) ?? 0;
 
+    const persistenceIsDue =
+      currentTime - previousPersistedAt >= DEVICE_PERSIST_INTERVAL_MS;
+
+    if (!persistenceIsDue) {
+      return;
+    }
+
+    if (this.persistenceInProgress.has(device.id)) {
+      return;
+    }
+
+    /*
+     * Record the time before starting the asynchronous operation so that
+     * telemetry received while the write is in progress does not start
+     * duplicate MongoDB writes.
+     */
+    this.lastPersistedAt.set(device.id, currentTime);
+    this.persistenceInProgress.add(device.id);
+
+    void saveDevice(device)
+      .catch((error: unknown) => {
+        /*
+         * Remove the timestamp after a failure so the next telemetry event
+         * can retry immediately rather than waiting another ten seconds.
+         */
+        this.lastPersistedAt.delete(device.id);
+
+        console.error(
+          `Unable to persist telemetry for device ${device.id}:`,
+          error
+        );
+      })
+      .finally(() => {
+        this.persistenceInProgress.delete(device.id);
+      });
+  }
 
   getAllDevices(): RegisteredDevice[] {
     this.refreshConnectionStatuses();
@@ -301,32 +362,39 @@ private fromDatabaseRecord(record: DeviceRecord): RegisteredDevice {
 
     this.devices.set(deviceId, updatedDevice);
 
+    /*
+     * Profile edits are deliberate user actions, so they are persisted
+     * immediately rather than waiting for the telemetry throttle.
+     */
     void updateDeviceProfile(deviceId, updates).catch((error: unknown) => {
-  console.error(
-    `Unable to persist profile updates for device ${deviceId}:`,
-    error
-  );
-});
+      console.error(
+        `Unable to persist profile updates for device ${deviceId}:`,
+        error
+      );
+    });
 
     return updatedDevice;
   }
 
   deleteDevice(deviceId: string): boolean {
-  const deletedFromRegistry = this.devices.delete(deviceId);
+    const deletedFromRegistry = this.devices.delete(deviceId);
 
-  if (!deletedFromRegistry) {
-    return false;
+    if (!deletedFromRegistry) {
+      return false;
+    }
+
+    this.lastPersistedAt.delete(deviceId);
+    this.persistenceInProgress.delete(deviceId);
+
+    void deleteDeviceById(deviceId).catch((error: unknown) => {
+      console.error(
+        `Unable to delete persisted device ${deviceId}:`,
+        error
+      );
+    });
+
+    return true;
   }
-
-  void deleteDeviceById(deviceId).catch((error: unknown) => {
-    console.error(
-      `Unable to delete persisted device ${deviceId}:`,
-      error
-    );
-  });
-
-  return true;
-}
 
   getSummary() {
     this.refreshConnectionStatuses();
@@ -337,12 +405,15 @@ private fromDatabaseRecord(record: DeviceRecord): RegisteredDevice {
       total: devices.length,
       online: devices.filter((device) => device.status === "ONLINE").length,
       offline: devices.filter((device) => device.status === "OFFLINE").length,
-      healthy: devices.filter((device) => device.healthState === "HEALTHY")
-        .length,
-      degraded: devices.filter((device) => device.healthState === "DEGRADED")
-        .length,
-      critical: devices.filter((device) => device.healthState === "CRITICAL")
-        .length,
+      healthy: devices.filter(
+        (device) => device.healthState === "HEALTHY"
+      ).length,
+      degraded: devices.filter(
+        (device) => device.healthState === "DEGRADED"
+      ).length,
+      critical: devices.filter(
+        (device) => device.healthState === "CRITICAL"
+      ).length,
     };
   }
 
@@ -356,25 +427,29 @@ private fromDatabaseRecord(record: DeviceRecord): RegisteredDevice {
       }
 
       const offlineDevice: RegisteredDevice = {
-  ...device,
-  status: "OFFLINE",
-  healthState: "OFFLINE",
-  healthScore: 0,
-};
+        ...device,
+        status: "OFFLINE",
+        healthState: "OFFLINE",
+        healthScore: 0,
+      };
 
-this.devices.set(deviceId, offlineDevice);
+      this.devices.set(deviceId, offlineDevice);
 
-void updatePersistedDeviceStatus(
-  deviceId,
-  "OFFLINE",
-  "OFFLINE",
-  0
-).catch((error: unknown) => {
-  console.error(
-    `Unable to persist offline status for device ${deviceId}:`,
-    error
-  );
-});
+      /*
+       * Offline state changes are operationally meaningful, so they are
+       * persisted immediately.
+       */
+      void updatePersistedDeviceStatus(
+        deviceId,
+        "OFFLINE",
+        "OFFLINE",
+        0
+      ).catch((error: unknown) => {
+        console.error(
+          `Unable to persist offline status for device ${deviceId}:`,
+          error
+        );
+      });
     }
   }
 }
