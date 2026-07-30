@@ -113,14 +113,14 @@ Although the current implementation simulates autonomous aircraft, the platform 
 
 # Core Platform Services
 
-| Service | Responsibility |
-|----------|----------------|
-| Dashboard | Mission Control user interface |
-| Gateway | MQTT ingestion and WebSocket routing |
+| Service         | Responsibility                          |
+| --------------- | --------------------------------------- |
+| Dashboard       | Mission Control user interface          |
+| Gateway         | MQTT ingestion and WebSocket routing    |
 | Device Registry | Persistent fleet inventory and metadata |
-| Alert Service | Real-time telemetry analysis |
-| Simulator | Aircraft simulation |
-| MongoDB | Persistent fleet storage |
+| Alert Service   | Real-time telemetry analysis            |
+| Simulator       | Aircraft simulation                     |
+| MongoDB         | Persistent fleet storage                |
 
 ---
 
@@ -147,6 +147,81 @@ Although the current implementation simulates autonomous aircraft, the platform 
 
 ---
 
+---
+
+# Testing
+
+Project Falcon includes automated contract tests that protect the platform's core device and telemetry data models.
+
+The test suite is built with **Vitest** and runs independently of MongoDB because Mongoose document validation does not require an active database connection.
+
+## Current Test Coverage
+
+| Test Suite                | Tests | Status     |
+| ------------------------- | ----: | ---------- |
+| Telemetry Schema Contract |    17 | ✅ Passing |
+| Device Schema Contract    |    28 | ✅ Passing |
+| Total                     |    45 | ✅ Passing |
+
+---
+
+## Telemetry Contract Tests
+
+The telemetry contract suite verifies:
+
+- Required telemetry fields
+- Latitude boundaries
+- Longitude boundaries
+- Speed validation
+- Heading boundaries
+- Battery percentage boundaries
+- Voltage validation
+- Required flight mode
+- Required timestamp
+- Embedded telemetry document behavior
+
+---
+
+## Device Contract Tests
+
+The device contract suite verifies:
+
+- Required device metadata
+- Maximum string lengths
+- Device status values
+- Health state values
+- Health score boundaries
+- Required lifecycle timestamps
+- Non-negative telemetry counters
+- Non-negative flight hours
+- Non-negative mission counts
+- Sensor array support
+- Required latest telemetry
+- Automatic string trimming
+
+
+tests/
+├── contract/
+│   ├── device-schema.test.ts
+│   └── telemetry-schema.test.ts
+│
+├── fixtures/
+│   └── device.fixture.ts
+│
+├── integration/
+├── unit/
+├── end-to-end/
+├── performance/
+├── security/
+└── helpers/
+
+---
+
+## Run All Tests
+
+````bash
+npm test
+
 # System Architecture
 
 ```text
@@ -172,7 +247,7 @@ Although the current implementation simulates autonomous aircraft, the platform 
                         │
                         ▼
          React Mission Control Dashboard
-```
+````
 
 ---
 
@@ -308,16 +383,16 @@ Current alert conditions include:
 
 # Platform Status
 
-| Component | Status |
-|-----------|--------|
+| Component                 | Status              |
+| ------------------------- | ------------------- |
 | Mission Control Dashboard | ✅ Production Ready |
-| Telemetry Gateway | ✅ Production Ready |
-| Device Registry | ✅ Production Ready |
-| MQTT Messaging | ✅ Operational |
-| MongoDB Persistence | ✅ Operational |
-| gRPC Alert Service | ✅ Operational |
-| Docker Environment | ✅ Operational |
-| Azure Migration | 🚧 Planned |
+| Telemetry Gateway         | ✅ Production Ready |
+| Device Registry           | ✅ Production Ready |
+| MQTT Messaging            | ✅ Operational      |
+| MongoDB Persistence       | ✅ Operational      |
+| gRPC Alert Service        | ✅ Operational      |
+| Docker Environment        | ✅ Operational      |
+| Azure Migration           | 🚧 Planned          |
 
 ---
 
@@ -441,6 +516,11 @@ Project Falcon demonstrates modern enterprise software engineering practices, in
 
 ---
 
+
+Then update the root **Repository Structure** block to this:
+
+```md
+
 # Repository Structure
 
 ```text
@@ -453,6 +533,16 @@ project-falcon/
 │   └── alert-service/
 │
 ├── packages/
+│
+├── tests/
+│   ├── contract/
+│   ├── fixtures/
+│   ├── integration/
+│   ├── unit/
+│   ├── end-to-end/
+│   ├── performance/
+│   ├── security/
+│   └── helpers/
 │
 ├── docs/
 │   ├── README.md
@@ -468,10 +558,10 @@ project-falcon/
 │   ├── security/
 │   └── user-guide/
 │
+├── AI_CONTEXT.md
 ├── docker-compose.yml
 ├── package.json
 └── README.md
-```
 
 ---
 
