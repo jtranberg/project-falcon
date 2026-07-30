@@ -36,11 +36,11 @@ Professional Browser-Based Command and Control for Autonomous Aircraft
 
 Falcon Drone Console is a professional browser-based ground control station for the Falcon autonomous flight platform.
 
-Designed using React, TypeScript, and Socket.IO, the application provides operators with live aircraft telemetry, guided flight controls, mission management, and real-time command acknowledgements through a modern command interface.
+Built with React, TypeScript, Vite, and Socket.IO, the console provides operators with live aircraft telemetry, guided flight controls, mission management, and real-time command acknowledgements through a modern browser interface.
 
-The console communicates with the Falcon Gateway, which forwards commands through MQTT to a native C++ flight controller while streaming telemetry back to the browser.
+The application communicates with the Falcon Gateway, which securely forwards commands over MQTT to a native C++ flight controller while streaming live telemetry back to the operator.
 
----
+Falcon is deployed as a distributed cloud platform consisting of independently deployed frontend, gateway, simulator, messaging, and flight controller services.---
 
 # Features
 
@@ -58,6 +58,32 @@ Monitor aircraft status in real time.
 * Temperature
 * Flight mode
 * Last transmission time
+
+---
+
+
+# Deployment
+
+Falcon is deployed as a distributed cloud application.
+
+### Frontend
+
+* Netlify
+* React
+* TypeScript
+* Vite
+
+### Backend Services
+
+* Falcon Gateway (Render)
+* Falcon Drone Client (Render)
+* Falcon Flight Simulator (Render)
+
+### Messaging
+
+* HiveMQ Cloud MQTT
+
+The deployed services communicate through secure Socket.IO and MQTT connections to provide real-time command and telemetry streaming.
 
 ---
 
@@ -105,38 +131,63 @@ Telemetry timeouts automatically detect aircraft communication loss.
 
 ---
 
+
+# Current Capabilities
+
+The current Falcon platform supports:
+
+* Live telemetry streaming
+* Browser-based flight control
+* Guided altitude changes
+* Guided heading changes
+* Autonomous mission execution
+* Return-to-home operations
+* Landing procedures
+* Real-time activity logging
+* Gateway acknowledgements
+* Cloud deployment across multiple services
+* Native C++ flight simulation
+
+---
+
 # System Architecture
 
-```text
-                Falcon Platform
+---
 
-         +-------------------------+
-         |   Drone Console         |
-         | React + TypeScript      |
-         +-----------+-------------+
+                                 Falcon Platform
+
+      +------------------------------+
+      |      Drone Console           |
+      |  React + TypeScript          |
+      |        Netlify              |
+      +--------------+---------------+
                      |
-               Socket.IO
+                 Socket.IO
                      |
-         +-----------v-------------+
-         |    Falcon Gateway       |
-         |      Node.js            |
-         +-----------+-------------+
+      +--------------v---------------+
+      |      Falcon Gateway          |
+      |         Node.js              |
+      |          Render              |
+      +--------------+---------------+
                      |
                    MQTT
                      |
-         +-----------v-------------+
-         | Native C++ Flight Core  |
-         |   Drone Controller      |
-         +-----------+-------------+
+      +--------------v---------------+
+      |      HiveMQ Cloud Broker     |
+      +--------------+---------------+
                      |
-            Live Telemetry Stream
-```
+      +--------------v---------------+
+      | Native C++ Flight Controller |
+      |          Render              |
+      +--------------+---------------+
+                     |
+             Live Telemetry Stream
 
 ---
 
 # Command Flow
 
-```text
+
 Operator
 
      ↓
@@ -166,7 +217,23 @@ Telemetry
      ↓
 
 Drone Console
-```
+
+---
+
+
+# Cloud Architecture
+
+Falcon is designed as a distributed service-oriented platform.
+
+Current production deployment includes:
+
+* 3 Render services
+* 2 Netlify applications
+* HiveMQ Cloud MQTT messaging
+* Native C++ flight controller
+* Browser-based ground control station
+* Real-time telemetry streaming
+* Socket.IO command routing
 
 ---
 
@@ -274,7 +341,7 @@ Displays chronological operational events including:
 
 # Project Structure
 
-```text
+
 src/
 
  ├── App.tsx
@@ -288,7 +355,7 @@ public/
 docs/
 
  ├── screenshot.png
-```
+
 
 ---
 
@@ -368,15 +435,15 @@ Upcoming capabilities include:
 
 ---
 
-# Related Projects
+## Related Projects
 
 * Falcon Gateway
 * Native C++ Falcon Drone
-* Falcon MQTT Infrastructure
+* Falcon Flight Simulator
 * Observation Lounge
+* Falcon MQTT Infrastructure
 
-Together these applications form the Falcon autonomous command-and-control platform.
-
+Together these services form the Falcon autonomous command-and-control platform and provide real-time operational visibility across the deployed system.
 ---
 
 # License
