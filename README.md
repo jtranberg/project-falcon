@@ -63,6 +63,9 @@ Production-oriented IoT Fleet Management Platform
 ![Leaflet](https://img.shields.io/badge/Leaflet-Live%20Maps-199900?logo=leaflet)
 ![Azure](https://img.shields.io/badge/Azure-Cloud%20Roadmap-0078D4?logo=microsoftazure)
 ![License](https://img.shields.io/badge/License-MIT-green)
+![Vitest](https://img.shields.io/badge/Vitest-Testing-6E9F18?logo=vitest)
+![Tests](https://img.shields.io/badge/Tests-45%20Passing-brightgreen)
+![Contract%20Tests](https://img.shields.io/badge/Contract%20Tests-45-success)
 
 </p>
 
