@@ -14,6 +14,37 @@
 <strong>Mission Control for Connected Devices</strong>
 </p>
 
+---
+
+## Mission Control Dashboard
+
+<p align="center">
+  <img
+    src="./docs/screenshot.png"
+    alt="Project Falcon Mission Control Dashboard"
+    width="100%"
+  />
+</p>
+
+<p align="center">
+<em>Mission Control Dashboard providing fleet monitoring, device management, live maps, alerts, and operational intelligence.</em>
+</p>
+
+---
+
+The operations dashboard provides:
+
+- Live fleet map
+- Aircraft selection
+- Flight trail visualization
+- Fleet telemetry
+- Gateway latency
+- Active alerts
+- Connection monitoring
+- Operational overview
+
+---
+
 <p align="center">
 Production-oriented IoT Fleet Management Platform
 </p>
