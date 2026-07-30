@@ -12,8 +12,16 @@
     "dev:alerts": "npm run dev -w @falcon/alert-service",
     "dev:dashboard": "npm run dev -w @falcon/dashboard",
     "build": "npm run build --workspaces",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:telemetry": "vitest run tests/contract/telemetry-schema.test.ts",
+    "test:coverage": "vitest run --coverage",
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^3.2.4",
+    "vitest": "^3.2.4"
   },
   "engines": {
     "node": ">=20"
