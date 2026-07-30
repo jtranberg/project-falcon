@@ -172,5 +172,17 @@ client.on("connect", () => {
 });
 
 client.on("error", (error) => {
-  console.error("MQTT Drone Client error:", error.message);
+  console.error("MQTT Drone Client error:", error);
+});
+
+client.on("offline", () => {
+  console.log("MQTT client offline");
+});
+
+client.on("reconnect", () => {
+  console.log("MQTT reconnecting...");
+});
+
+client.on("close", () => {
+  console.log("MQTT connection closed");
 });
