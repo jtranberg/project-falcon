@@ -1,6 +1,5 @@
 # Project Falcon
 
-
 <p align="center">
   <img
     src="./apps/dashboard/public/falcon-icon.png"
@@ -40,17 +39,23 @@ Production-oriented IoT Fleet Management Platform
 
 <p align="center">
   <img
-    src="./docs/screenshot.png"
+    src="./docs/screenshot-drone-console.png"
     alt="Project Falcon Mission Control Dashboard"
     width="100%"
   />
 </p>
 
+<p align="center">
+<em>Mission Control dashboard showing live telemetry, fleet status, interactive mapping, and operational health.</em>
+</p>
+
+---
+
 Event-Driven • MQTT • gRPC • MongoDB • Socket.IO • React
 
 ---
 
-## Highlights
+# Highlights
 
 - Real-time IoT fleet monitoring
 - MQTT event-driven architecture
@@ -70,6 +75,19 @@ Project Falcon is a production-oriented IoT fleet management platform built for 
 Built around an event-driven architecture, Falcon combines MQTT messaging, WebSocket streaming, gRPC microservices, MongoDB persistence, and a centralized Device Registry to provide persistent fleet state, operational awareness, and live telemetry visualization through a modern Mission Control dashboard.
 
 Although the current implementation simulates autonomous aircraft, the platform is architected to support virtually any connected device including robotics, autonomous vehicles, industrial equipment, environmental sensors, manufacturing systems, embedded devices, and smart infrastructure.
+
+---
+
+# Core Platform Services
+
+| Service | Responsibility |
+|----------|----------------|
+| Dashboard | Mission Control user interface |
+| Gateway | MQTT ingestion and WebSocket routing |
+| Device Registry | Persistent fleet inventory and metadata |
+| Alert Service | Real-time telemetry analysis |
+| Simulator | Aircraft simulation |
+| MongoDB | Persistent fleet storage |
 
 ---
 
@@ -162,7 +180,33 @@ Although the current implementation simulates autonomous aircraft, the platform 
 
 ---
 
-# Platform Capabilitiesities
+# Documentation
+
+Complete platform documentation is available in the **docs** directory.
+
+Topics include:
+
+- Architecture
+- Engineering
+- API Reference
+- Deployment
+- Operations
+- Security
+- Governance
+- Compliance
+- User Guide
+- Releases
+- Roadmap
+
+See:
+
+```text
+docs/README.md
+```
+
+---
+
+# Platform Capabilities
 
 ## Real-Time Telemetry
 
@@ -226,6 +270,21 @@ Current alert conditions include:
 - Critical Signal
 - Elevated Temperature
 - Critical Temperature
+
+---
+
+# Platform Status
+
+| Component | Status |
+|-----------|--------|
+| Mission Control Dashboard | ✅ Production Ready |
+| Telemetry Gateway | ✅ Production Ready |
+| Device Registry | ✅ Production Ready |
+| MQTT Messaging | ✅ Operational |
+| MongoDB Persistence | ✅ Operational |
+| gRPC Alert Service | ✅ Operational |
+| Docker Environment | ✅ Operational |
+| Azure Migration | 🚧 Planned |
 
 ---
 
@@ -329,7 +388,7 @@ http://localhost:5050/api/health
 
 ---
 
-# Enterprise Engineering Principles
+# Engineering Practices
 
 Project Falcon demonstrates modern enterprise software engineering practices, including:
 
@@ -351,7 +410,7 @@ Project Falcon demonstrates modern enterprise software engineering practices, in
 
 # Repository Structure
 
-
+```text
 project-falcon/
 │
 ├── apps/
@@ -363,22 +422,31 @@ project-falcon/
 ├── packages/
 │
 ├── docs/
-│   ├── screenshot.png
-│   ├── architecture.png
-│   └── roadmap.md
+│   ├── README.md
+│   ├── architecture/
+│   ├── api/
+│   ├── compliance/
+│   ├── deployment/
+│   ├── engineering/
+│   ├── governance/
+│   ├── operations/
+│   ├── releases/
+│   ├── roadmap/
+│   ├── security/
+│   └── user-guide/
 │
 ├── docker-compose.yml
 ├── package.json
 └── README.md
-
+```
 
 ---
 
 # Future Vision
 
-Project Falcon is evolving into a cloud-native IoT fleet operations platform capable of supporting industrial-scale connected devices.
+Project Falcon is a cloud-native IoT fleet operations platform designed to monitor, manage, and analyze connected devices at scale.
 
-The next generation of Falcon will extend beyond real-time monitoring into operational intelligence through historical telemetry, mission replay, fleet analytics, predictive maintenance, AI-assisted insights, and Azure-native infrastructure while preserving its event-driven architecture and scalable microservice foundation.
+Future releases will extend the platform with historical telemetry, mission replay, fleet analytics, predictive maintenance, AI-assisted operational insights, digital twin capabilities, and Azure-native infrastructure while preserving its event-driven architecture and scalable microservice foundation.
 
 ---
 
