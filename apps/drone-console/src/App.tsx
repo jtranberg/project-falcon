@@ -67,7 +67,8 @@ type DroneCommand =
   | "RETURN_TO_HOME"
   | "LAND"
   | "SET_ALTITUDE"
-  | "SET_HEADING";
+  | "SET_HEADING"
+  | "SHUTDOWN";
 
 type CommandStatusPayload = {
   droneId: string;
@@ -398,6 +399,10 @@ function App() {
     sendCommand("LAND");
   }, [sendCommand]);
 
+  const shutdownDrone = useCallback(() => {
+    sendCommand("SHUTDOWN");
+  }, [sendCommand]);
+
   useEffect(() => {
     return () => {
       clearTelemetryStaleTimer();
@@ -500,7 +505,7 @@ function App() {
               disabled={connectionStatus === "Disconnected"}
               onClick={disconnectDrone}
             >
-              Disconnect
+              console
             </button>
           </div>
         </article>
@@ -619,17 +624,17 @@ function App() {
           </div>
 
           <button
-  type="button"
-  className="button button-primary"
-  disabled={controlsDisabled}
-  onClick={() =>
-    sendCommand("SET_ALTITUDE", {
-      altitudeM: targetAltitudeM,
-    })
-  }
->
-  Apply Altitude
-</button>
+            type="button"
+            className="button button-primary"
+            disabled={controlsDisabled}
+            onClick={() =>
+              sendCommand("SET_ALTITUDE", {
+                altitudeM: targetAltitudeM,
+              })
+            }
+          >
+            Apply Altitude
+          </button>
 
           <label className="field-label" htmlFor="heading">
             Target heading: {targetHeadingDeg}°
@@ -650,17 +655,17 @@ function App() {
           />
 
           <button
-  type="button"
-  className="button button-primary"
-  disabled={controlsDisabled}
-  onClick={() =>
-    sendCommand("SET_HEADING", {
-      headingDeg: targetHeadingDeg,
-    })
-  }
->
-  Apply Heading
-</button>
+            type="button"
+            className="button button-primary"
+            disabled={controlsDisabled}
+            onClick={() =>
+              sendCommand("SET_HEADING", {
+                headingDeg: targetHeadingDeg,
+              })
+            }
+          >
+            Apply Heading
+          </button>
 
           <div className="button-row control-buttons">
             <button
@@ -715,6 +720,14 @@ function App() {
               onClick={landDrone}
             >
               Land
+            </button>
+            <button
+              type="button"
+              className="button button-danger"
+              disabled={controlsDisabled}
+              onClick={shutdownDrone}
+            >
+              Shutdown Drone
             </button>
           </div>
         </article>

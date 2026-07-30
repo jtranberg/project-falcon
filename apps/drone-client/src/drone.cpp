@@ -31,7 +31,6 @@
 #include <unistd.h>
 #endif
 
-
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -99,9 +98,9 @@ namespace
     }
 
     void startHealthServer()
-{
-    std::thread([]()
     {
+        std::thread([]()
+                    {
         try
         {
             const int port = std::stoi(
@@ -320,10 +319,9 @@ namespace
                 << "Health server error: "
                 << error.what()
                 << '\n';
-        }
-    }).detach();
-}
-
+        } })
+            .detach();
+    }
 
     void handleSignal(int)
     {
@@ -701,6 +699,17 @@ namespace
                     << commandId
                     << ")"
                     << '\n';
+
+                if (command == "SHUTDOWN")
+                {
+                    std::cout
+                        << "Shutdown requested for "
+                        << droneId_
+                        << ". Stopping telemetry and disconnecting."
+                        << '\n';
+
+                    running = false;
+                }
             }
             catch (const json::exception &error)
             {
@@ -1010,12 +1019,24 @@ namespace
 
                 return true;
             }
+            if (command == "SHUTDOWN")
+            {
+                clearGuidedTargets();
+
+                targetSpeedMps_ = 0.0;
+
+                successDetail =
+                    "Shutdown accepted. Aircraft telemetry will stop "
+                    "and the MQTT connection will close.";
+
+                return true;
+            }
 
             rejectionReason =
                 "Unsupported command. Supported commands are "
                 "START_MISSION, PAUSE_MISSION, RESUME_MISSION, "
                 "HOVER, SET_ALTITUDE, SET_HEADING, "
-                "RETURN_TO_HOME, and LAND.";
+                "RETURN_TO_HOME, LAND, and SHUTDOWN.";
 
             return false;
         }
