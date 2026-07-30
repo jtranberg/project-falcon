@@ -475,6 +475,26 @@ project-falcon/
 
 ---
 
+# Docs section
+
+docs/
+├── README.md
+├── screenshot.png
+├── screenshot-drone-console.png
+├── architecture/
+├── api/
+├── compliance/
+├── deployment/
+├── engineering/
+├── governance/
+├── operations/
+├── releases/
+├── roadmap/
+├── security/
+└── user-guide/
+
+---
+
 # Future Vision
 
 Project Falcon is a cloud-native IoT fleet operations platform designed to monitor, manage, and analyze connected devices at scale.
