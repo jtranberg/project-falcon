@@ -18,6 +18,26 @@
 #include <mqtt/async_client.h>
 #include <nlohmann/json.hpp>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
+
+
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#endif
+
 using json = nlohmann::json;
 
 namespace
@@ -77,6 +97,233 @@ namespace
 
         return output.str();
     }
+
+    void startHealthServer()
+{
+    std::thread([]()
+    {
+        try
+        {
+            const int port = std::stoi(
+                getEnvironmentValue("PORT", "10000"));
+
+#ifdef _WIN32
+            WSADATA winsockData{};
+
+            if (WSAStartup(
+                    MAKEWORD(2, 2),
+                    &winsockData) != 0)
+            {
+                std::cerr
+                    << "Unable to initialize Winsock."
+                    << '\n';
+
+                return;
+            }
+
+            SOCKET serverSocket =
+                socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+
+            if (serverSocket == INVALID_SOCKET)
+            {
+                std::cerr
+                    << "Unable to create health server socket."
+                    << '\n';
+
+                WSACleanup();
+                return;
+            }
+#else
+            const int serverSocket =
+                socket(AF_INET, SOCK_STREAM, 0);
+
+            if (serverSocket < 0)
+            {
+                std::cerr
+                    << "Unable to create health server socket."
+                    << '\n';
+
+                return;
+            }
+#endif
+
+            int optionValue = 1;
+
+#ifdef _WIN32
+            setsockopt(
+                serverSocket,
+                SOL_SOCKET,
+                SO_REUSEADDR,
+                reinterpret_cast<const char *>(&optionValue),
+                sizeof(optionValue));
+#else
+            setsockopt(
+                serverSocket,
+                SOL_SOCKET,
+                SO_REUSEADDR,
+                &optionValue,
+                sizeof(optionValue));
+#endif
+
+            sockaddr_in address{};
+
+            address.sin_family = AF_INET;
+            address.sin_addr.s_addr = htonl(INADDR_ANY);
+            address.sin_port =
+                htons(static_cast<unsigned short>(port));
+
+            if (bind(
+                    serverSocket,
+                    reinterpret_cast<sockaddr *>(&address),
+                    sizeof(address)) != 0)
+            {
+                std::cerr
+                    << "Unable to bind health server to port "
+                    << port
+                    << '\n';
+
+#ifdef _WIN32
+                closesocket(serverSocket);
+                WSACleanup();
+#else
+                close(serverSocket);
+#endif
+
+                return;
+            }
+
+            if (listen(serverSocket, 5) != 0)
+            {
+                std::cerr
+                    << "Unable to listen on health server."
+                    << '\n';
+
+#ifdef _WIN32
+                closesocket(serverSocket);
+                WSACleanup();
+#else
+                close(serverSocket);
+#endif
+
+                return;
+            }
+
+            std::cout
+                << "Health endpoint listening on port "
+                << port
+                << '\n';
+
+            const std::string responseBody =
+                "{\"success\":true,"
+                "\"service\":\"falcon-drone-client\"}";
+
+            const std::string response =
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: application/json\r\n"
+                "Content-Length: " +
+                std::to_string(responseBody.size()) +
+                "\r\n"
+                "Connection: close\r\n"
+                "\r\n" +
+                responseBody;
+
+            while (running)
+            {
+                sockaddr_in clientAddress{};
+
+#ifdef _WIN32
+                int clientAddressLength =
+                    sizeof(clientAddress);
+
+                SOCKET clientSocket =
+                    accept(
+                        serverSocket,
+                        reinterpret_cast<sockaddr *>(
+                            &clientAddress),
+                        &clientAddressLength);
+
+                if (clientSocket == INVALID_SOCKET)
+                {
+                    if (!running)
+                    {
+                        break;
+                    }
+
+                    continue;
+                }
+#else
+                socklen_t clientAddressLength =
+                    sizeof(clientAddress);
+
+                const int clientSocket =
+                    accept(
+                        serverSocket,
+                        reinterpret_cast<sockaddr *>(
+                            &clientAddress),
+                        &clientAddressLength);
+
+                if (clientSocket < 0)
+                {
+                    if (!running)
+                    {
+                        break;
+                    }
+
+                    continue;
+                }
+#endif
+
+                char requestBuffer[1024]{};
+
+#ifdef _WIN32
+                recv(
+                    clientSocket,
+                    requestBuffer,
+                    static_cast<int>(
+                        sizeof(requestBuffer) - 1),
+                    0);
+
+                send(
+                    clientSocket,
+                    response.c_str(),
+                    static_cast<int>(response.size()),
+                    0);
+
+                closesocket(clientSocket);
+#else
+                recv(
+                    clientSocket,
+                    requestBuffer,
+                    sizeof(requestBuffer) - 1,
+                    0);
+
+                send(
+                    clientSocket,
+                    response.c_str(),
+                    response.size(),
+                    0);
+
+                close(clientSocket);
+#endif
+            }
+
+#ifdef _WIN32
+            closesocket(serverSocket);
+            WSACleanup();
+#else
+            close(serverSocket);
+#endif
+        }
+        catch (const std::exception &error)
+        {
+            std::cerr
+                << "Health server error: "
+                << error.what()
+                << '\n';
+        }
+    }).detach();
+}
+
 
     void handleSignal(int)
     {
@@ -1238,6 +1485,8 @@ int main(
 {
     std::signal(SIGINT, handleSignal);
     std::signal(SIGTERM, handleSignal);
+
+    startHealthServer();
 
     const std::string brokerUrl =
         argc > 1

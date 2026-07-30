@@ -23,6 +23,7 @@ target_link_libraries(
     PRIVATE
         PahoMqttCpp::paho-mqttpp3
         nlohmann_json::nlohmann_json
+        $<$<PLATFORM_ID:Windows>:ws2_32>
 )
 
 target_compile_definitions(
